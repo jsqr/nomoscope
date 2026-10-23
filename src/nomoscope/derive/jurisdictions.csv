@@ -1,0 +1,53 @@
+id,name,kind,parent,state_fips,county_fips,place_fips,geoid
+us,United States,country,,,,,
+us-al,Alabama,state,us,01,,,01
+us-ak,Alaska,state,us,02,,,02
+us-az,Arizona,state,us,04,,,04
+us-ar,Arkansas,state,us,05,,,05
+us-ca,California,state,us,06,,,06
+us-co,Colorado,state,us,08,,,08
+us-ct,Connecticut,state,us,09,,,09
+us-de,Delaware,state,us,10,,,10
+us-dc,District of Columbia,district,us,11,,,11
+us-fl,Florida,state,us,12,,,12
+us-ga,Georgia,state,us,13,,,13
+us-hi,Hawaii,state,us,15,,,15
+us-id,Idaho,state,us,16,,,16
+us-il,Illinois,state,us,17,,,17
+us-in,Indiana,state,us,18,,,18
+us-ia,Iowa,state,us,19,,,19
+us-ks,Kansas,state,us,20,,,20
+us-ky,Kentucky,state,us,21,,,21
+us-la,Louisiana,state,us,22,,,22
+us-me,Maine,state,us,23,,,23
+us-md,Maryland,state,us,24,,,24
+us-ma,Massachusetts,state,us,25,,,25
+us-mi,Michigan,state,us,26,,,26
+us-mn,Minnesota,state,us,27,,,27
+us-ms,Mississippi,state,us,28,,,28
+us-mo,Missouri,state,us,29,,,29
+us-mt,Montana,state,us,30,,,30
+us-ne,Nebraska,state,us,31,,,31
+us-nv,Nevada,state,us,32,,,32
+us-nh,New Hampshire,state,us,33,,,33
+us-nj,New Jersey,state,us,34,,,34
+us-nm,New Mexico,state,us,35,,,35
+us-ny,New York,state,us,36,,,36
+us-nc,North Carolina,state,us,37,,,37
+us-nd,North Dakota,state,us,38,,,38
+us-oh,Ohio,state,us,39,,,39
+us-ok,Oklahoma,state,us,40,,,40
+us-or,Oregon,state,us,41,,,41
+us-pa,Pennsylvania,state,us,42,,,42
+us-ri,Rhode Island,state,us,44,,,44
+us-sc,South Carolina,state,us,45,,,45
+us-sd,South Dakota,state,us,46,,,46
+us-tn,Tennessee,state,us,47,,,47
+us-tx,Texas,state,us,48,,,48
+us-ut,Utah,state,us,49,,,49
+us-vt,Vermont,state,us,50,,,50
+us-va,Virginia,state,us,51,,,51
+us-wa,Washington,state,us,53,,,53
+us-wv,West Virginia,state,us,54,,,54
+us-wi,Wisconsin,state,us,55,,,55
+us-wy,Wyoming,state,us,56,,,56

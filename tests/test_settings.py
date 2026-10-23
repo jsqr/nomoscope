@@ -1,0 +1,123 @@
+import pytest
+
+from nomoscope import settings
+
+APP = "proj"
+
+
+@pytest.fixture(autouse=True)
+def clean_env(monkeypatch, tmp_path):
+    monkeypatch.delenv(settings.env_config(APP), raising=False)
+    monkeypatch.delenv(settings.env_data_root(APP), raising=False)
+    monkeypatch.setattr(settings, "USER_CONFIG_DIR", tmp_path / "home-config")
+
+
+def write(path, data_root="/srv/one", extra=""):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f'data_root = "{data_root}"\n{extra}')
+    return path
+
+
+def test_the_tiers_hang_off_the_data_root(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    write(tmp_path / "proj.toml", data_root=str(tmp_path / "d"))
+    cfg = settings.load(APP)
+    assert cfg.app == APP
+    assert cfg.snarfed == tmp_path / "d" / "sources" / "snarfed"
+    assert cfg.crunched == tmp_path / "d" / "sources" / "crunched"
+    assert cfg.derived == tmp_path / "d" / "derived"
+    assert cfg.staging == tmp_path / "d" / "staging"
+    assert cfg.graph == tmp_path / "d" / "graph.duckdb"
+    assert cfg.catalog == tmp_path / "d" / "catalog.duckdb"
+
+
+def test_the_file_and_variables_are_named_for_the_project(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    write(tmp_path / "other.toml", data_root="/srv/other")
+    with pytest.raises(settings.SettingsError, match="PROJ_DATA_ROOT"):
+        settings.load(APP)
+
+
+def test_search_walks_up_from_cwd(tmp_path, monkeypatch):
+    write(tmp_path / "proj.toml")
+    deep = tmp_path / "a" / "b"
+    deep.mkdir(parents=True)
+    monkeypatch.chdir(deep)
+    assert settings.find_config_file(APP) == tmp_path / "proj.toml"
+
+
+def test_the_user_config_is_last(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    user = write(tmp_path / "home-config" / "proj" / "config.toml", data_root="/srv/user")
+    assert settings.find_config_file(APP) == user
+
+
+def test_env_config_beats_cwd(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    write(tmp_path / "proj.toml", data_root="/srv/cwd")
+    named = write(tmp_path / "named.toml", data_root="/srv/named")
+    monkeypatch.setenv("PROJ_CONFIG", str(named))
+    assert settings.load(APP).data_root.as_posix() == "/srv/named"
+
+
+def test_env_data_root_overrides_file(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    write(tmp_path / "proj.toml", data_root="/srv/file")
+    monkeypatch.setenv("PROJ_DATA_ROOT", "/srv/env")
+    cfg = settings.load(APP)
+    assert cfg.data_root.as_posix() == "/srv/env"
+    assert cfg.path == tmp_path / "proj.toml"
+
+
+def test_env_data_root_alone_needs_no_file(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PROJ_DATA_ROOT", str(tmp_path / "d"))
+    cfg = settings.load(APP)
+    assert cfg.path is None
+    assert cfg.config_root is None
+    assert cfg.user_agent == settings.DEFAULT_USER_AGENT
+
+
+def test_config_root_is_taken_from_the_files_directory(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    write(
+        tmp_path / "repo" / "proj.toml",
+        extra='config_root = "config"\nuser_agent = "proj/1 (ops@example.org)"\n',
+    )
+    cfg = settings.load(APP, tmp_path / "repo" / "proj.toml")
+    assert cfg.config_root == tmp_path / "repo" / "config"
+    assert cfg.user_agent == "proj/1 (ops@example.org)"
+
+
+def test_source_and_segment_settings_are_passed_through(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    write(
+        tmp_path / "proj.toml",
+        extra='[sources.codifier]\nkey_env = "K"\n[segments]\nlimit = 200\n',
+    )
+    cfg = settings.load(APP)
+    assert cfg.source_settings["codifier"]["key_env"] == "K"
+    assert cfg.segments == {"limit": 200}
+
+
+def test_a_secret_is_read_from_the_variable_the_file_names(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    write(tmp_path / "proj.toml", extra='[sources.api]\nkey_env = "PROJ_API_KEY"\n')
+    cfg = settings.load(APP)
+    with pytest.raises(settings.SettingsError, match="PROJ_API_KEY is not set"):
+        cfg.secret("api")
+    monkeypatch.setenv("PROJ_API_KEY", "s3cret")
+    assert cfg.secret("api") == "s3cret"
+    with pytest.raises(settings.SettingsError, match="sets no key_env"):
+        cfg.secret("other")
+
+
+def test_missing_data_root_names_the_search_paths(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(settings.SettingsError, match="no data root"):
+        settings.load(APP)
+
+
+def test_explicit_missing_path_is_an_error(tmp_path):
+    with pytest.raises(settings.SettingsError, match="not found"):
+        settings.load(APP, tmp_path / "absent.toml")

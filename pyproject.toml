@@ -1,0 +1,50 @@
+[project]
+name = "nomoscope"
+version = "0.1.0"
+description = "Archive, carve, and track the history of published law."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Johnathan Jenkins", email = "jj@jsqr.org" }]
+requires-python = ">=3.14"
+dependencies = [
+  "duckdb>=1.4.2",
+  "httpx",
+  "polars[pyarrow]",
+  "typer",
+]
+
+[dependency-groups]
+dev = [
+  "basedpyright",
+  "pytest",
+  "ruff",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nomoscope"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "B", "UP", "SIM", "RUF"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["nomoscope"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.basedpyright]
+pythonVersion = "3.14"
+include = ["src"]
+pythonPlatform = "All"
+typeCheckingMode = "standard"
+reportMissingTypeArgument = "warning"
+reportImportCycles = "warning"

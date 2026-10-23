@@ -1,0 +1,21 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+      - uses: extractions/setup-just@v2
+      - run: uv python install 3.14
+      - run: just setup
+      - run: just check
+      - run: just typecheck
+      - run: just test
