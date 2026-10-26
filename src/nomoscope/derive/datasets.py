@@ -18,6 +18,7 @@ from dataclasses import dataclass
 
 import polars as pl
 
+from nomoscope.crunch.schemas import SUBDIVISIONS
 from nomoscope.derive import history, ids, ledger, registry, segment, subdivide
 from nomoscope.derive.conventions import NONE, Conventions
 from nomoscope.derive.ledger import SEEN
@@ -31,6 +32,7 @@ VERSION_PAYLOAD = (
     "text",
     "markup",
     "line_indents",
+    "subdivisions",
     "blob_sha256",
     "source_id",
     "effective_date",
@@ -105,6 +107,7 @@ VERSION_SCHEMA = pl.Schema(
         "text": pl.String,
         "markup": pl.String,
         "line_indents": LINE_INDENTS,
+        "subdivisions": SUBDIVISIONS,
         "blob_sha256": pl.String,
         "source_id": pl.String,
         "statute_year": pl.Int64,
@@ -546,11 +549,17 @@ Parsed = Mapping[str, list[subdivide.Division]]
 
 
 def parsed_versions(versions: pl.DataFrame) -> dict[str, list[subdivide.Division]]:
-    """Each version's subdivisions, by version id."""
-    columns = ["id", "text", "line_indents"]
+    """Each version's subdivisions, by version id: the carved ones where the
+    cruncher gave them, else parsed from the text.
+    """
+    columns = ["id", "text", "line_indents", "subdivisions"]
     return {
-        version_id: subdivide.parse(text or "", indents)
-        for version_id, text, indents in versions.select(columns).iter_rows()
+        version_id: (
+            subdivide.from_carved(carved)
+            if carved is not None
+            else subdivide.parse(text or "", indents)
+        )
+        for version_id, text, indents, carved in versions.select(columns).iter_rows()
     }
 
 

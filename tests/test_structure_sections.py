@@ -1,7 +1,7 @@
 from nomoscope.structure import grammar as gr
 from nomoscope.structure import sections
 from nomoscope.structure.parse import parse
-from tests.structure import GRAMMAR, B, C, lines
+from tests.structure import GRAMMAR, RUN_IN, B, C, lines
 
 RULES = gr.Sections(history=[r"^\(Ord\. "], drop=[r"^Editor's note"], drafting="numbered")
 
@@ -51,3 +51,70 @@ def test_carve():
         ("5/I", "5", True),
     ]
     assert [n["level"] for n in carved.nodes] == ["chapter", "article"]
+
+
+def test_subdivision_spans_index_the_normalized_text():
+    found = lines(
+        ("§ 5-1. Purpose.", 72, B),
+        ("The Town finds that", 72),
+        ("A. “Permits”  are due.", 72),
+        ("(1) Fees.", 96),
+        ("(2) Terms are set", 96),
+        ("by resolution.", 96, {"gap_before": 13.0}),
+        ("Editor's note: Amended 2020.", 72),
+        ("B. (1) Stacked first.", 72),
+        ("(2) Stacked second.", 96),
+        ("(Ord. 3, 2019)", 72),
+    )
+    g = GRAMMAR.model_copy(update={"sections": RULES})
+    [section] = sections.carve(parse(found, g), found, g).sections
+    text = section["text"]
+    assert text == (
+        'The Town finds that\nA. "Permits" are due.\n(1) Fees.\n'
+        "(2) Terms are set by resolution.\nB. (1) Stacked first.\n(2) Stacked second."
+    )
+    cut = {s["path"]: text[s["start_char"] : s["end_char"]] for s in section["subdivisions"]}
+    assert cut == {
+        "A": 'A. "Permits" are due.\n(1) Fees.\n(2) Terms are set by resolution.',
+        "A/1": "(1) Fees.",
+        "A/2": "(2) Terms are set by resolution.",
+        "B": "B. (1) Stacked first.\n(2) Stacked second.",
+        "B/1": "(1) Stacked first.",
+        "B/2": "(2) Stacked second.",
+    }
+    levels = {s["path"]: (s["level"], s["style"], s["number"]) for s in section["subdivisions"]}
+    assert levels["A"] == ("subsection", "upper_alpha", "A")
+    assert levels["B/2"] == ("paragraph", "arabic", "2")
+
+
+def test_a_dropped_subdivision_leaves_with_its_children():
+    rules = gr.Sections(drop=[r"^B\. Repealed"])
+    found = lines(
+        ("§ 5-1. Purpose.", 72, B),
+        ("A. Kept.", 72),
+        ("B. Repealed.", 72),
+        ("C. Kept too.", 72),
+    )
+    g = GRAMMAR.model_copy(update={"sections": rules})
+    [section] = sections.carve(parse(found, g), found, g).sections
+    assert section["text"] == "A. Kept.\nC. Kept too."
+    assert [s["path"] for s in section["subdivisions"]] == ["A", "C"]
+
+
+def test_run_in_terms_are_subdivisions_by_slug():
+    found = lines(
+        ("§ 1. Definitions.", 72, B),
+        ("BUILDING — A structure.", 72),
+        ("A. It has a roof.", 96),
+        ("STREET — A road.", 72),
+    )
+    [section] = sections.carve(parse(found, RUN_IN), found, RUN_IN).sections
+    cut = {
+        s["path"]: section["text"][s["start_char"] : s["end_char"]] for s in section["subdivisions"]
+    }
+    assert cut == {
+        "building": "BUILDING — A structure.\nA. It has a roof.",
+        "building/A": "A. It has a roof.",
+        "street": "STREET — A road.",
+    }
+    assert {s["level"] for s in section["subdivisions"]} == {"run_in", "subsection"}

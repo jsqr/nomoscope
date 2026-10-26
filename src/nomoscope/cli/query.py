@@ -1,5 +1,6 @@
-"""The sql command."""
+"""The sql and cite commands."""
 
+from datetime import date
 from typing import Annotated
 
 import duckdb
@@ -7,6 +8,7 @@ import polars as pl
 import typer
 
 from nomoscope.catalog import build as catalog
+from nomoscope.catalog import cite as citing
 from nomoscope.cli.common import fail, load_settings
 from nomoscope.crunch.registry import Registry
 
@@ -44,3 +46,31 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
                 typer.echo(frame)
             if frame.height > rows:
                 typer.echo(f"{frame.height} rows; {rows} shown")
+
+    @app.command()
+    def cite(
+        jurisdiction: str,
+        code: str,
+        ref: Annotated[str, typer.Argument(help='A citation, such as "67-14(A)(1)"')],
+        on: Annotated[str | None, typer.Option(help="The date, YYYY-MM-DD; default today")] = None,
+    ) -> None:
+        """Print a section or subdivision as it was in force on a date."""
+        cfg = load_settings(name)
+        if not cfg.catalog.is_file():
+            raise fail(f"no catalog at {cfg.catalog}; run derive or catalog first")
+        try:
+            when = date.fromisoformat(on) if on else None
+        except ValueError as e:
+            raise fail(f"--on: {e}") from e
+        try:
+            found = citing.lookup(cfg, jurisdiction, code, ref, when)
+        except duckdb.Error as e:
+            raise fail(str(e)) from e
+        if found is None:
+            raise fail(f"{ref}: not in force in {jurisdiction} {code} on {when or date.today()}")
+        where = f"({found.path.replace('/', ')(')})" if found.path else ""
+        level = f"  [{found.level}]" if found.level else ""
+        typer.echo(f"{found.section_num}{where}  {found.heading or ''}{level}")
+        typer.echo(found.text)
+        until = f"{found.end_date} ({found.end_basis})" if found.end_date else "current"
+        typer.echo(f"in force {found.start_date} ({found.start_basis}) to {until}")

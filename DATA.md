@@ -146,6 +146,11 @@ and soft hyphens are removed. Other characters, such as the section sign,
 are kept. The number of lines does not change. So the same words with different
 spacing are one version. The source's own form belongs in `markup`.
 
+A cruncher that knows a section's subdivisions gives them in
+`subdivisions`: each one's path below the section (`A/1`), the source's
+word for its level, its style and number, and its span into the
+normalized text. The grammared cruncher does this.
+
 `law_publications` describes the publication:
 
 - `published_date` and `published_basis`: the stated date (`stated`),
@@ -274,9 +279,12 @@ conventions rebuilds every jurisdiction.
 
 ### Subdivisions and segments
 
-`law_subdivisions` finds the subdivisions in each version's text, such as
-(a), (1), (A), and (i), as spans into the text. The rules are in
-`src/nomoscope/derive/subdivide.py`.
+`law_subdivisions` has one row per subdivision of a version, as a span
+into its text. A version whose carved section gives `subdivisions` uses
+them. Otherwise derive finds the parenthesized enumerators, such as (a),
+(1), (A), and (i), with the rules in `src/nomoscope/derive/subdivide.py`.
+`law_versions` keeps the carved list, so a fold onto stored datasets
+keeps it too.
 
 `segments` cuts each version into spans for retrieval. A version within
 the limit is one segment. A longer version is cut into subdivisions, and
@@ -300,6 +308,7 @@ root can move.
 | `law_placed_at(jurisdiction, date)` | each version's placement on a date |
 | `session_end(jurisdiction, session)` | the session's stated end, else its last publication's date |
 | `law_at_session(jurisdiction, session)` | the versions in force at a session's end |
+| `subdivision_at(jurisdiction, code, section, path, date)` | a section in force on a date, or one subdivision of it (`path` `'b/1'`), with its text |
 
 ```
 myproject sql "SELECT section_num, start_basis, end_basis
@@ -307,6 +316,13 @@ myproject sql "SELECT section_num, start_basis, end_basis
 myproject sql "SELECT * FROM publications" --format csv
 ```
 
-In Python, `nomoscope.catalog.build.connect(settings)` opens the catalog
+`cite` takes a citation as people write it, `67-14(A)(1)`:
+
+```
+myproject cite us-ny-amenia municipal "67-14(A)(1)" --on 2024-07-01
+```
+
+In Python, `nomoscope.catalog.cite.lookup(settings, jurisdiction, code,
+ref, on)` returns the same, and `nomoscope.catalog.build.connect(settings)` opens the catalog
 read-only. A plain `duckdb.connect` must first run
 `SET file_search_path = '<data_root>'`.

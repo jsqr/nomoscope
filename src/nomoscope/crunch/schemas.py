@@ -12,18 +12,11 @@ Every row has a jurisdiction column. conform fills missing optional
 columns with nulls, casts every column, and rejects unknown or missing
 required columns.
 
-conform also normalizes section text before hashing it. It converts line
-endings, composes Unicode (NFC), replaces curly quotes and non-ASCII
-spaces, removes soft hyphens, collapses runs of spaces and tabs, and
-trims each line. Other characters, such as the section sign, stay. The
-number of lines does not change. The same words printed with different
-spacing or quotes then hash the same. The source's original form belongs
-in markup.
+conform also normalizes section text (`nomoscope.text`) before hashing
+it, so the same words printed with different spacing or quotes hash the
+same. The source's original form belongs in markup.
 """
 
-import hashlib
-import re
-import unicodedata
 from dataclasses import dataclass
 from datetime import date
 
@@ -32,6 +25,7 @@ import polars as pl
 from nomoscope.crunch import CrunchError
 from nomoscope.graph import fingerprint
 from nomoscope.graph.records import RecordRow
+from nomoscope.text import normalize, text_sha256
 
 LAW_SECTIONS = "law_sections"
 LAW_NODES = "law_nodes"
@@ -40,6 +34,21 @@ SESSIONS = "sessions"
 TABLES = (LAW_SECTIONS, LAW_NODES, LAW_PUBLICATIONS, SESSIONS)
 
 BASES = ("stated", "last_modified", "fetched")
+# A section's subdivisions, where the cruncher knows them: spans into its
+# normalized text. path is below the section ("A/1"); level is the source's
+# word for the level.
+SUBDIVISIONS = pl.List(
+    pl.Struct(
+        {
+            "path": pl.String,
+            "level": pl.String,
+            "style": pl.String,
+            "number": pl.String,
+            "start_char": pl.Int64,
+            "end_char": pl.Int64,
+        }
+    )
+)
 COMPLETENESS = ("full", "partial")
 
 
@@ -68,6 +77,7 @@ def carved(zone: str) -> dict[str, pl.Schema]:
                 "blob_sha256": pl.String,
                 "source_updated": when,
                 "line_indents": pl.List(pl.Int64),
+                "subdivisions": SUBDIVISIONS,
                 "drafting": pl.String,
             }
         ),
@@ -126,37 +136,9 @@ REQUIRED = {
 }
 
 
-QUOTES = str.maketrans(
-    {
-        "\u2018": "'",
-        "\u2019": "'",
-        "\u201a": "'",
-        "\u2032": "'",
-        "\u201c": '"',
-        "\u201d": '"',
-        "\u201e": '"',
-        "\u2033": '"',
-    }
-)
-SPACES_RE = re.compile(r"[^\S\n]+")
-# An invisible hint where a word may break; never part of the word.
-SOFT_HYPHEN = "\u00ad"
 # Bump when conform gives different output for the same frame, so every
 # carve reruns.
 VERSION = "2"
-
-
-def normalize(text: str | None) -> str | None:
-    if text is None:
-        return None
-    text = text.replace("\r\n", "\n").replace("\r", "\n").replace(SOFT_HYPHEN, "")
-    text = unicodedata.normalize("NFC", text)
-    lines = (SPACES_RE.sub(" ", line).strip() for line in text.translate(QUOTES).split("\n"))
-    return "\n".join(lines)
-
-
-def text_sha256(text: str | None) -> str | None:
-    return None if text is None else hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def conform(table: str, frame: pl.DataFrame, zone: str = "UTC") -> pl.DataFrame:

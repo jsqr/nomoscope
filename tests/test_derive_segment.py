@@ -2,7 +2,7 @@ from itertools import pairwise
 
 import pytest
 
-from nomoscope.derive import segment
+from nomoscope.derive import segment, subdivide
 from nomoscope.derive.segment import Limit, Segment
 
 MAX_CHARS = 2000
@@ -225,3 +225,17 @@ def test_a_long_chapeau_keeps_its_enumerators_and_last_sentence():
     assert found[0].chapeau == ("(b) Therefore the agency shall do all of the following:",)
     short = f"(b) Short lead:\n(1) {words(15)}\n(2) {words(15)}"
     assert segment.cut(short, W20)[0].chapeau == ("(b) Short lead:",)
+
+
+def test_cut_follows_carved_subdivisions():
+    text = "A. " + "alpha " * 8 + "\nB. " + "beta " * 8
+    b = text.index("B.")
+    rows = [
+        {"path": "A", "level": "subsection", "style": "upper_alpha", "number": "A",
+         "start_char": 0, "end_char": b - 1},
+        {"path": "B", "level": "subsection", "style": "upper_alpha", "number": "B",
+         "start_char": b, "end_char": len(text)},
+    ]  # fmt: skip
+    pieces = segment.cut(text, segment.Limit(10), None, subdivide.from_carved(rows))
+    assert [p.path for p in pieces] == [("A",), ("B",)]
+    assert text[pieces[1].start : pieces[1].end].startswith("B. beta")

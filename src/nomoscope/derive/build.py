@@ -37,7 +37,7 @@ from nomoscope.settings import Settings
 log = logging.getLogger(__name__)
 
 # Bump when the same carved tables give different datasets.
-VERSION = "2"
+VERSION = "3"
 FOLD = "fold"
 REFOLD = "refold"
 

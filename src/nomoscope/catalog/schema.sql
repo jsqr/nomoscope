@@ -59,3 +59,17 @@ CREATE MACRO session_end(in_jurisdiction, in_session) AS (
 
 CREATE MACRO law_at_session(in_jurisdiction, in_session) AS TABLE
 SELECT * FROM law_at(in_jurisdiction, session_end(in_jurisdiction, in_session));
+
+-- One section in force on a date, or one of its subdivisions, with its
+-- text. in_path is the subdivision's path ('b/1'); '' gives the section.
+CREATE MACRO subdivision_at(in_jurisdiction, in_code, in_section, in_path, on_date) AS TABLE
+SELECT l.jurisdiction, l.law_code, l.section_num, coalesce(s.path, '') AS path, s.level,
+       l.heading, l.id AS law_version_id,
+       CASE WHEN s.path IS NULL THEN l.text
+            ELSE substr(l.text, s.start_char + 1, s.end_char - s.start_char) END AS text,
+       l.start_date, l.start_basis, l.end_date, l.end_basis
+FROM law_at(in_jurisdiction, on_date) l
+LEFT JOIN law_subdivisions s
+       ON s.law_version_id = l.id AND s.path = in_path AND in_path <> ''
+WHERE l.law_code = in_code AND l.section_num = in_section
+  AND (in_path = '' OR s.path IS NOT NULL);

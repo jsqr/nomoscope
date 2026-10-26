@@ -242,7 +242,15 @@ class GrammarCruncher:
         return CrunchResult(planned.key.scope, CARVE, row.record, row.jurisdiction, tables)
 
 
-SECTION_COLUMNS = ("section_num", "node_treepath", "heading", "history", "text", "drafting")
+SECTION_COLUMNS = (
+    "section_num",
+    "node_treepath",
+    "heading",
+    "history",
+    "text",
+    "subdivisions",
+    "drafting",
+)
 NODE_COLUMNS = (
     "node_treepath",
     "parent_treepath",

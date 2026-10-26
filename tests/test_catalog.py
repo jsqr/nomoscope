@@ -6,6 +6,7 @@ from typer.testing import CliRunner
 
 from nomoscope import cli
 from nomoscope.catalog import build as catalog
+from nomoscope.catalog import cite
 from tests import fake
 from tests.pipeline import P1, P2, P3
 
@@ -166,3 +167,34 @@ def test_the_catalog_follows_a_moved_data_root(cfg, three, monkeypatch):
     cfg.data_root.rename(moved)
     monkeypatch.setenv("NOMOSCOPE_DATA_ROOT", str(moved))
     assert sorted(law_at(date(2025, 2, 1))) == ["1-1", "1-2"]
+
+
+def test_cite_parse():
+    sections = ["67-14", "67-14A", "67-3"]
+    assert cite.parse("§ 67-14(A)(1)", sections) == ("67-14", "A/1")
+    assert cite.parse("67-14 A(1)", sections) == ("67-14", "A/1")
+    assert cite.parse("67-14A(1)", sections) == ("67-14A", "1")
+    assert cite.parse("67-3/public-place", sections) == ("67-3", "public-place")
+    assert cite.parse("67-14", sections) == ("67-14", "")
+    assert cite.parse("99-1", sections) is None
+
+
+def test_cite_gives_the_subdivision_in_force(three, cfg):
+    before = cite.lookup(cfg, J, "municipal", "1-2(a)", date(2024, 3, 1))
+    after = cite.lookup(cfg, J, "municipal", "1-2(a)", date(2024, 7, 1))
+    assert before is not None and after is not None
+    assert before.text == '(a) "City" means Windytown.'
+    assert after.text == '(a) "City" means the City of Windytown.'
+    assert before.law_version_id != after.law_version_id
+    assert cite.lookup(cfg, J, "municipal", "1-2(c)", date(2024, 3, 1)) is None
+    whole = cite.lookup(cfg, J, "municipal", "1-2", date(2024, 3, 1))
+    assert whole is not None and whole.text.startswith("(a)") and whole.path == ""
+
+
+def test_cite_command(three):
+    out = invoke("cite", J, "municipal", "1-2(b)", "--on", "2024-07-01")
+    assert out.splitlines()[:2] == [
+        "1-2(b)  Definitions  [subsection]",
+        '(b) "Code" means this code.',
+    ]
+    assert "in force" in out

@@ -23,6 +23,7 @@ from nomoscope.settings import Settings
 NEEDS = (
     registry.LAW_VERSIONS,
     registry.LAW_OBSERVATIONS,
+    registry.LAW_SUBDIVISIONS,
     registry.SESSIONS,
     registry.PUBLICATIONS,
 )

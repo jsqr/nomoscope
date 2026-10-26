@@ -25,8 +25,9 @@ conventions, levels are null.
 """
 
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 LOWER_ALPHA = "lower_alpha"
 DIGIT = "digit"
@@ -69,10 +70,13 @@ class Division:
     position: int
     sequence: int
     indent: int | None
+    level: str | None = None
 
 
 def level(levels: Levels | None, division: Division) -> str | None:
-    """The convention's word for the division's rank, or None."""
+    """The source's word for the division's level, else the convention's, or None."""
+    if division.level is not None:
+        return division.level
     if levels is None:
         return None
     if levels.indent is not None and division.indent is not None:
@@ -304,3 +308,40 @@ def closing(
     if not rest or not rest[0].isupper():
         return None
     return first_break
+
+
+# The structure grammar's style names, as this module names them.
+CARVED_STYLES = {"arabic": DIGIT}
+RUN_IN = "run_in"
+
+
+def from_carved(rows: Sequence[Mapping[str, Any]]) -> list[Division]:
+    """Divisions from a carved `subdivisions` list, in text order."""
+    ordered = sorted(rows, key=lambda r: r["start_char"])
+    index: dict[tuple[str, ...], int] = {}
+    children: dict[int | None, int] = {}
+    out = []
+    for i, r in enumerate(ordered):
+        parts: list[str] = r["path"].split("/")
+        path = tuple(parts)
+        parent = index.get(path[:-1]) if len(path) > 1 else None
+        children[parent] = children.get(parent, 0) + 1
+        index[path] = i
+        raw: str | None = r["style"]
+        style = RUN_IN if raw is None else CARVED_STYLES.get(raw, raw)
+        out.append(
+            Division(
+                path=path,
+                style=style,
+                number=r["number"] or parts[-1],
+                depth=len(path),
+                start=r["start_char"],
+                end=r["end_char"],
+                parent=parent,
+                position=children[parent],
+                sequence=i + 1,
+                indent=None,
+                level=r["level"],
+            )
+        )
+    return out

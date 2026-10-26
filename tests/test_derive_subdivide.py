@@ -239,3 +239,24 @@ def test_a_last_item_keeps_its_own_lines():
     )
     assert spans(multi, parse(multi))[2].endswith("the order is final.")
     assert spans(ELEC_6000, parse(ELEC_6000))[0].endswith("Federal Election Campaign Act.")
+
+
+def test_from_carved():
+    rows = [
+        {"path": "B", "level": "subsection", "style": "upper_alpha", "number": "B",
+         "start_char": 30, "end_char": 40},
+        {"path": "A", "level": "subsection", "style": "upper_alpha", "number": "A",
+         "start_char": 0, "end_char": 29},
+        {"path": "A/1", "level": "paragraph", "style": "arabic", "number": "1",
+         "start_char": 10, "end_char": 29},
+        {"path": "A/building", "level": "run_in", "style": None, "number": "BUILDING —",
+         "start_char": 20, "end_char": 29},
+    ]  # fmt: skip
+    found = subdivide.from_carved(rows)
+    assert [d.path for d in found] == [("A",), ("A", "1"), ("A", "building"), ("B",)]
+    assert [d.parent for d in found] == [None, 0, 0, None]
+    assert [d.position for d in found] == [1, 1, 2, 2]
+    assert [d.sequence for d in found] == [1, 2, 3, 4]
+    assert [d.depth for d in found] == [1, 2, 2, 1]
+    assert [d.style for d in found] == ["upper_alpha", "digit", "run_in", "upper_alpha"]
+    assert subdivide.level(None, found[1]) == "paragraph"

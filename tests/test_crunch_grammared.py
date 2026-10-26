@@ -15,6 +15,7 @@ from nomoscope.derive import build
 from nomoscope.graph import steps
 from nomoscope.graph.steps import CARVE
 from nomoscope.graph.store import Store
+from nomoscope.partition import dataset_path
 from nomoscope.settings import Settings
 from nomoscope.snarf import archive, local
 from nomoscope.snarf.run import blob_store
@@ -133,6 +134,17 @@ def test_review_admits_and_derive_builds(cfg, record):
     [result] = derived(cfg)
     assert result.jurisdiction == JURISDICTION
     assert result.tables["law_versions"] == 2
+    subs = pl.read_parquet(dataset_path(cfg, "law_subdivisions", JURISDICTION))
+    versions = pl.read_parquet(dataset_path(cfg, "law_versions", JURISDICTION))
+    text = dict(versions.select("id", "text").iter_rows())
+    [a] = subs.to_dicts()
+    assert (a["path"], a["level"], a["style"], a["number"]) == (
+        "A",
+        "subsection",
+        "upper_alpha",
+        "A",
+    )
+    assert text[a["law_version_id"]][a["start_char"] : a["end_char"]] == "A. Permits are required."
 
 
 def test_more_findings_than_accepted_hold(cfg, record):
