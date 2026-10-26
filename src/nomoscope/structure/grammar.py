@@ -173,6 +173,11 @@ class Sections(BaseModel):
     drafting: str | None = Field(
         default=None, description="The drafting conventions of the sections, by file name"
     )
+    levels: list[str] = Field(
+        default=[],
+        description="Division levels above the section that are carved as sections when "
+        "no division is under them, such as a definitions chapter without sections",
+    )
 
     _history = field_validator("history")(_regexes)
     _drop = field_validator("drop")(_regexes)
@@ -225,6 +230,10 @@ class Grammar(BaseModel):
             for ref in set(FIELD.findall(lv.label)) - {"n"}:
                 if ref not in names[:i]:
                     raise ValueError(f"{lv.name}: {{{ref}}} names no level above it")
+        divisions = [lv.name for lv in self.levels if lv.kind == "division"]
+        unknown = set(self.sections.levels) - set(divisions)
+        if unknown:
+            raise ValueError(f"sections.levels {sorted(unknown)} are not division levels")
         return self
 
 

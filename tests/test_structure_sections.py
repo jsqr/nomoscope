@@ -1,5 +1,7 @@
+import pytest
+
+from nomoscope.structure import checks, sections
 from nomoscope.structure import grammar as gr
-from nomoscope.structure import sections
 from nomoscope.structure.parse import parse
 from tests.structure import GRAMMAR, RUN_IN, B, C, lines
 
@@ -118,3 +120,53 @@ def test_run_in_terms_are_subdivisions_by_slug():
         "street": "STREET — A road.",
     }
     assert {s["level"] for s in section["subdivisions"]} == {"run_in", "subsection"}
+
+
+DEFINITIONS = lines(
+    ("Chapter 5", 280, C),
+    ("FIRE", 280, C),
+    ("§ 5-1. Purpose.", 72, B),
+    ("Text.", 72),
+    ("Chapter 6", 280, C),
+    ("DEFINITIONS", 280, C),
+    ("Words have these meanings.", 72),
+    ("A. Building means a structure.", 72),
+    ("B. Street means a road.", 72),
+)
+
+
+def test_an_undivided_chapter_is_carved_when_its_level_is_named():
+    g = GRAMMAR.model_copy(update={"sections": gr.Sections(levels=["chapter"])})
+    carved = sections.carve(parse(DEFINITIONS, g), DEFINITIONS, g)
+    by_num = {s["section_num"]: s for s in carved.sections}
+    assert set(by_num) == {"5-1", "6"}
+    six = by_num["6"]
+    assert (six["heading"], six["node_treepath"]) == ("DEFINITIONS", None)
+    assert six["text"].startswith("Words have these meanings.\nA. Building")
+    assert [s["path"] for s in six["subdivisions"]] == ["A", "B"]
+    assert [n["node_treepath"] for n in carved.nodes] == ["5"]
+
+
+def test_an_undivided_chapter_is_a_heading_and_a_finding_otherwise():
+    carved = sections.carve(parse(DEFINITIONS, GRAMMAR), DEFINITIONS, GRAMMAR)
+    assert {s["section_num"] for s in carved.sections} == {"5-1"}
+    assert [n["node_treepath"] for n in carved.nodes] == ["5", "6"]
+    found = checks.unsectioned(parse(DEFINITIONS, GRAMMAR), GRAMMAR)
+    assert [(f["node_id"], f["detail"]) for f in found] == [
+        ("6", "no section under it: 2 subdivisions, 26 characters of text")
+    ]
+    named = GRAMMAR.model_copy(update={"sections": gr.Sections(levels=["chapter"])})
+    assert checks.unsectioned(parse(DEFINITIONS, named), named) == []
+
+
+def test_sections_levels_must_be_division_levels():
+    with pytest.raises(ValueError, match="not division levels"):
+        GRAMMAR.model_validate({**GRAMMAR.model_dump(), "sections": {"levels": ["subsection"]}})
+
+
+def test_unnumbered_divisions_are_not_unsectioned():
+    marks = [{"ordinal": 0, "depth": 0, "title": "Preface", "page": 0, "top": 60.0}]
+    found = lines(("PREFACE", 280, C), *[("This code is republished. " * 3, 72)] * 4)
+    nodes = parse(found, GRAMMAR, marks)
+    assert [n["level"] for n in nodes] == ["document", "heading"]
+    assert checks.unsectioned(nodes, GRAMMAR) == []

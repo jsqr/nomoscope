@@ -54,7 +54,9 @@ division down to the deepest enumerated subdivision, in that order.
 - `sections.history`: regexes for the paragraphs that end a section and
   record the ordinances that made it. `sections.drop`: regexes for the
   paragraphs that are the publisher's notes, such as editor's notes and
-  cross references, which are left out.
+  cross references, which are left out. `sections.levels`: division levels
+  above the section, such as a definitions chapter with no sections, whose
+  text is law and is carved as a section.
 - Use the code's own words for level names, lowercase and singular.
   Two levels may share a label form when they differ in style or indent.
 """

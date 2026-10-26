@@ -118,6 +118,11 @@ two steps:
   so editing it reruns the parse.
 - `carve` writes the carved tables from the snapshots.
 
+Sections are the grammar's deepest division level. `[sections] levels`
+names higher levels whose divisions are carved as sections when nothing
+divides them, such as a definitions chapter without sections; the
+`unsectioned` check reports numbered ones that are not.
+
 A grammar's `[review]` records whether a person has checked its parse, and
 how many findings of each check were accepted. A carve is held, and derive
 does not read it, until the review is `reviewed` and no check has more

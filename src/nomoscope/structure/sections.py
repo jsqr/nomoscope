@@ -1,7 +1,8 @@
 """Turn a parsed tree into law_sections and law_nodes rows.
 
-Sections are the divisions at the grammar's deepest division level.
-Every other division is a heading row. A section's text is its document
+Sections are the divisions at the grammar's deepest division level, and
+the divisions at a level in `[sections] levels` with no division under
+them. Every other division is a heading row. A section's text is its document
 (`documents.py`) without the paragraphs `[sections]` drops, and its
 trailing history paragraphs go to `history`. The text is normalized
 (`nomoscope.text`), and its subdivisions are spans into it. Treepaths are
@@ -26,6 +27,18 @@ class Carved:
 def section_level(grammar: gr.Grammar) -> str | None:
     divisions = [lv.name for lv in grammar.levels if lv.kind == "division"]
     return divisions[-1] if divisions else None
+
+
+def is_section(node: Row, grammar: gr.Grammar, divided: set[str]) -> bool:
+    """Whether a node is carved as a section.
+
+    `divided` holds the ids of the nodes with a division under them.
+    """
+    if node["kind"] != "division":
+        return False
+    if node["level"] == section_level(grammar):
+        return True
+    return node["level"] in grammar.sections.levels and node["id"] not in divided
 
 
 @dataclass(frozen=True)
@@ -109,7 +122,7 @@ def spans(doc: str, parts: Split, subs: list[Row], by_id: dict[str, Row]) -> lis
 
 
 def carve(nodes: list[Row], lines: list[Row], grammar: gr.Grammar) -> Carved:
-    level = section_level(grammar)
+    divided = {n["parent_id"] for n in nodes if n["kind"] == "division"}
     docs, subs, back = documents.build(nodes, lines)
     by_doc = {d["node_id"]: d for d in docs}
     by_id = {n["id"]: n for n in nodes}
@@ -123,7 +136,7 @@ def carve(nodes: list[Row], lines: list[Row], grammar: gr.Grammar) -> Carved:
 
     sections = []
     for n in nodes:
-        if n["kind"] != "division" or n["level"] != level:
+        if not is_section(n, grammar, divided):
             continue
         doc = by_doc[n["id"]]
         parts = split(doc["text"], grammar.sections)
@@ -147,7 +160,7 @@ def carve(nodes: list[Row], lines: list[Row], grammar: gr.Grammar) -> Carved:
         )
 
     holding = {s["node_treepath"] for s in sections}
-    heads = [n for n in nodes if n["kind"] == "division" and n["level"] != level]
+    heads = [n for n in nodes if n["kind"] == "division" and not is_section(n, grammar, divided)]
     heads_out = [
         {
             "node_treepath": n["id"],

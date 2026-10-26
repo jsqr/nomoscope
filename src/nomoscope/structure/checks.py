@@ -10,7 +10,7 @@ from collections import Counter
 
 import polars as pl
 
-from nomoscope.structure import Row, parse
+from nomoscope.structure import Row, parse, sections
 from nomoscope.structure import bookmarks as bm
 from nomoscope.structure import enumerate as en
 from nomoscope.structure import grammar as gr
@@ -22,6 +22,8 @@ SCHEMA = {
     "detail": pl.String,
 }
 LONG_HEADING = 200
+# Own text at or above this, in characters, makes an undivided division law, not a note.
+UNSECTIONED_TEXT = 200
 PAGE_SLACK = 1
 
 
@@ -264,6 +266,35 @@ def labels(
     return out
 
 
+def unsectioned(nodes: list[Row], grammar: gr.Grammar) -> list[Row]:
+    """Numbered divisions above the section level with no division under them,
+    but with subdivisions or text: law that is not carved, unless
+    `[sections] levels` names the level.
+
+    Unnumbered divisions, such as a preface or a disposition table, are
+    front and back matter, not law.
+    """
+    level = sections.section_level(grammar)
+    divided = {n["parent_id"] for n in nodes if n["kind"] == "division"}
+    subs: dict[str, int] = {}
+    for n in nodes:
+        if n["kind"] == "subdivision":
+            subs[n["parent_id"]] = subs.get(n["parent_id"], 0) + 1
+    out = []
+    for n in nodes:
+        if n["kind"] != "division" or n["level"] == level or n["id"] in divided:
+            continue
+        if n["number"] is None:
+            continue
+        if n["level"] in grammar.sections.levels:
+            continue
+        count, size = subs.get(n["id"], 0), len(n["text"] or "")
+        if count or size >= UNSECTIONED_TEXT:
+            detail = f"no {level} under it: {count} subdivisions, {size} characters of text"
+            out.append(_row(n, "unsectioned", detail))
+    return out
+
+
 def textless(lines: list[Row], pages: int) -> list[Row]:
     """Pages with no lines: blank, or scanned without a text layer."""
     have = {line["page"] for line in lines}
@@ -298,6 +329,7 @@ def run(
         *coverage(nodes, grammar),
         *headings(nodes, grammar),
         *depth(nodes, grammar),
+        *unsectioned(nodes, grammar),
     ]
 
 
