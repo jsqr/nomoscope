@@ -11,3 +11,6 @@ Lines, bookmarks, nodes, and findings are dicts (`Row`).
 from typing import Any
 
 Row = dict[str, Any]
+
+# Bump when the same lines and grammar give a different parse or section text.
+VERSION = "2"

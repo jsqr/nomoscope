@@ -28,6 +28,18 @@ def citation(node: Row) -> str:
     return node["id"]
 
 
+def _separator(line: Row, index: int, previous: int, node: Row) -> str:
+    """Join pieces of one line with a space, and start a paragraph or a subdivision on a new line.
+
+    A page's first line has no gap above it, so a subdivision label there
+    is known by its node, not its gap.
+    """
+    if index == previous:
+        return " "
+    opens = node["kind"] == "subdivision" and node["line_first"] == index
+    return "\n" if opens or starts_paragraph(line) else " "
+
+
 def build(nodes: list[Row], lines: list[Row]) -> tuple[list[Row], list[Row], list[Row]]:
     """Return the documents, the subdivision spans, and the source line of each piece of text."""
     by_id = {n["id"]: n for n in nodes}
@@ -42,11 +54,15 @@ def build(nodes: list[Row], lines: list[Row]) -> tuple[list[Row], list[Row], lis
         if n["kind"] == "subdivision":
             continue
         text = ""
-        for index, start, node_id in sorted(owned.get(n["id"], [])):
+        pieces = sorted(owned.get(n["id"], []))
+        for k, (index, start, node_id) in enumerate(pieces):
             line = lines[index]
-            piece = (line.get("text") or "").strip()[start:]
+            # Stacked labels ("A. (1) Text") put two nodes' pieces on one line.
+            later = pieces[k + 1] if k + 1 < len(pieces) else None
+            end = later[1] if later is not None and later[0] == index else None
+            piece = (line.get("text") or "").strip()[start:end].strip()
             if text:
-                text += "\n" if starts_paragraph(line) else " "
+                text += _separator(line, index, pieces[k - 1][0], by_id[node_id])
             first, text = len(text), text + piece
             spans.setdefault(node_id, [first, first])[1] = len(text)
             back.append(

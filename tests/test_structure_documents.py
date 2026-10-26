@@ -50,3 +50,31 @@ def test_documents_and_spans():
     ]
     assert {b["page"] for b in rows} == {0}
     assert rows[0]["index"] == 4
+
+
+def section_text(found: list[dict]) -> str:
+    docs, _, _ = documents.build(parse(found, GRAMMAR), found)
+    return next(d["text"] for d in docs if d["citation"] == "5-1")
+
+
+def test_stacked_labels_appear_once():
+    found = lines(
+        ("§ 5-1. Purpose.", 72, B),
+        ("A. (1) Fees are due.", 72),
+        ("(2) Fees are paid.", 96),
+    )
+    assert section_text(found) == "A. (1) Fees are due.\n(2) Fees are paid."
+
+
+def test_a_subdivision_at_the_top_of_a_page_starts_a_line():
+    body = [(f"Line {i} continues", 72, {"gap_before": 13.0}) for i in range(18)]
+    found = lines(
+        ("§ 5-1. Purpose.", 72, B),
+        ("A. First.", 72),
+        *body,
+        ("B. Second.", 72, {"gap_before": None}),
+    )
+    assert found[-1]["page"] == 1
+    text = section_text(found)
+    assert text.startswith("A. First. Line 0 continues")
+    assert text.endswith("Line 17 continues\nB. Second.")

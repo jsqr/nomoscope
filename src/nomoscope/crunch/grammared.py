@@ -18,6 +18,7 @@ from pathlib import Path
 
 import polars as pl
 
+from nomoscope import structure
 from nomoscope.crunch import CrunchError, runner, schemas
 from nomoscope.crunch import routes as routing
 from nomoscope.crunch.layout import Layout
@@ -182,8 +183,9 @@ class GrammarCruncher:
     zone: str = "UTC"
 
     def plan(self, cfg: Settings, name: str, rows: Sequence[RecordRow]) -> list[Planned]:
-        parse_version = fingerprint.code_version(f"{self.version}-parse", *SNAPSHOTS.values())
-        carve_version = schemas.carve_version(self.version, self.zone)
+        version = f"{self.version}-{structure.VERSION}"
+        parse_version = fingerprint.code_version(f"{version}-parse", *SNAPSHOTS.values())
+        carve_version = schemas.carve_version(version, self.zone)
         planned = []
         for p in record_plan(name, rows, parse_version, extra=lambda r: (grammar_input(cfg, r),)):
             planned.append(p)
