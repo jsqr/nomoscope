@@ -36,6 +36,7 @@ $config_root/
   crunchers.csv        which cruncher reads each record
   conventions/*.toml   drafting conventions
   jurisdictions.csv    the project's jurisdictions
+  grammars/<source>/<jurisdiction>/<code>.toml   a code's grammar
 ```
 
 Each file is optional. Each is an input of the steps that read it, so a
@@ -46,7 +47,7 @@ change reruns them.
 | stage | command | reads | writes |
 | --- | --- | --- | --- |
 | snarf | `snarf fetch`, `snarf due`, `snarf import` | a source, or local files | `sources/snarfed/` |
-| crunch | `crunch` | `sources/snarfed/`, `crunchers.csv` | `sources/crunched/<cruncher>/` |
+| crunch | `crunch` | `sources/snarfed/`, `crunchers.csv`, grammars | `sources/crunched/<cruncher>/` |
 | derive | `derive` | carved tables, conventions, jurisdictions | `derived/`, the catalog |
 | query | `sql "<query>"` | `catalog.duckdb` | nothing |
 
@@ -105,6 +106,26 @@ sources/crunched/<cruncher>/<table>/publication=<unit>/data.parquet          sna
 sources/crunched/<cruncher>/carved/<table>/publication=<record>/data.parquet carved tables
 ```
 
+### Grammared crunchers
+
+A `GrammarCruncher` reads a printed code, such as a PDF or an HTML
+export, with the code's grammar (`structure/grammar.py`). Each record has
+two steps:
+
+- `parse` writes snapshot tables: `parse_lines` (every line with its
+  layout), `parse_nodes` (the tree, with the lines each node spans), and
+  `parse_findings` (what the checks report). The grammar file is an input,
+  so editing it reruns the parse.
+- `carve` writes the carved tables from the snapshots.
+
+A grammar's `[review]` records whether a person has checked its parse, and
+how many findings of each check were accepted. A carve is held, and derive
+does not read it, until the review is `reviewed` and no check has more
+findings than it accepted. `status` counts held carves. `grammar sample`
+prints a record's lines for drafting a grammar, and `grammar infer`
+drafts one with a chat model (billed; the `infer` extra). `grammar check`
+parses a record with a grammar and writes nothing.
+
 ### The carved tables
 
 | table | one row per |
@@ -120,8 +141,9 @@ section's drafting conventions. `statutory_default_date` is set where the
 source has a default effective-date rule.
 
 Section text is normalized before it is hashed into `text_sha256`. Line
-endings, Unicode composition, quote marks, and spacing are made uniform.
-The number of lines does not change. So the same words with different
+endings, Unicode composition, quote marks, and spacing are made uniform,
+and soft hyphens are removed. Other characters, such as the section sign,
+are kept. The number of lines does not change. So the same words with different
 spacing are one version. The source's own form belongs in `markup`.
 
 `law_publications` describes the publication:

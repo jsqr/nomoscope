@@ -19,7 +19,7 @@ from nomoscope.snarf.feeds import FeedError, Source
 
 
 class Cruncher(Protocol):
-    def plan(self, name: str, rows: Sequence[RecordRow]) -> list[Planned]:
+    def plan(self, cfg: Settings, name: str, rows: Sequence[RecordRow]) -> list[Planned]:
         """Plan every step for the routed records, in run order.
 
         name is the cruncher's name in the registry, and the scope of its steps.

@@ -31,7 +31,7 @@ LINES = "lines"
 class Staged:
     """Loads each dump into a snapshot table, then carves every code from it."""
 
-    def plan(self, name: str, rows: Sequence[RecordRow]) -> list[Planned]:
+    def plan(self, cfg: Settings, name: str, rows: Sequence[RecordRow]) -> list[Planned]:
         loads = runner.record_plan(name, rows, "1", stage=CRUNCH)
         carves = [Planned(StepKey(CARVE, name, p.key.unit), (p.input,), "1") for p in loads]
         return [*loads, *carves]

@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS steps (
     code_version      VARCHAR NOT NULL,
     fingerprint       VARCHAR NOT NULL,    -- sha256(input_fingerprint || '\n' || code_version)
     ran_at            TIMESTAMP NOT NULL,
-    details           VARCHAR,             -- json diagnostics, not used for planning
+    details           VARCHAR,             -- json; derive reads a carve's admitted
     PRIMARY KEY (stage, scope, unit)
 );
 

@@ -30,6 +30,8 @@ CRUNCH = "crunch"
 CARVE = "carve"
 DERIVE = "derive"
 REFERENCE = "reference"
+# A config file read by a step; not a step itself.
+CONFIG = "config"
 
 
 class Staleness(Enum):
@@ -100,6 +102,12 @@ class Stored:
     code_version: str
     fingerprint: str
     ran_at: datetime
+    details: Mapping[str, object] | None = None
+
+
+def admitted(step: Stored) -> bool:
+    """Whether derive may read a carve: one that records admitted false is held."""
+    return not step.details or step.details.get("admitted") is not False
 
 
 def table_row(
@@ -179,13 +187,20 @@ def classify(
 
 def stored(conn: duckdb.DuckDBPyConnection, stage: str, scope: str) -> dict[str, Stored]:
     rows = conn.execute(
-        "SELECT unit, input_fingerprint, code_version, fingerprint, ran_at"
+        "SELECT unit, input_fingerprint, code_version, fingerprint, ran_at, details"
         " FROM steps WHERE stage = ? AND scope = ?",
         [stage, scope],
     ).fetchall()
     return {
-        unit: Stored(StepKey(stage, scope, unit), inp, code, fp, records.from_db(ran_at))
-        for unit, inp, code, fp, ran_at in rows
+        unit: Stored(
+            StepKey(stage, scope, unit),
+            inp,
+            code,
+            fp,
+            records.from_db(ran_at),
+            json.loads(details) if details is not None else None,
+        )
+        for unit, inp, code, fp, ran_at, details in rows
     }
 
 

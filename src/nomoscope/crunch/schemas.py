@@ -14,7 +14,8 @@ required columns.
 
 conform also normalizes section text before hashing it. It converts line
 endings, composes Unicode (NFC), replaces curly quotes and non-ASCII
-spaces, collapses runs of spaces and tabs, and trims each line. The
+spaces, removes soft hyphens, collapses runs of spaces and tabs, and
+trims each line. Other characters, such as the section sign, stay. The
 number of lines does not change. The same words printed with different
 spacing or quotes then hash the same. The source's original form belongs
 in markup.
@@ -29,6 +30,7 @@ from datetime import date
 import polars as pl
 
 from nomoscope.crunch import CrunchError
+from nomoscope.graph import fingerprint
 from nomoscope.graph.records import RecordRow
 
 LAW_SECTIONS = "law_sections"
@@ -137,12 +139,18 @@ QUOTES = str.maketrans(
     }
 )
 SPACES_RE = re.compile(r"[^\S\n]+")
+# An invisible hint where a word may break; never part of the word.
+SOFT_HYPHEN = "\u00ad"
+# Bump when conform gives different output for the same frame, so every
+# carve reruns.
+VERSION = "2"
 
 
 def normalize(text: str | None) -> str | None:
     if text is None:
         return None
-    text = unicodedata.normalize("NFC", text.replace("\r\n", "\n").replace("\r", "\n"))
+    text = text.replace("\r\n", "\n").replace("\r", "\n").replace(SOFT_HYPHEN, "")
+    text = unicodedata.normalize("NFC", text)
     lines = (SPACES_RE.sub(" ", line).strip() for line in text.translate(QUOTES).split("\n"))
     return "\n".join(lines)
 
@@ -241,3 +249,8 @@ def publication(
             schema_overrides={"law_codes": pl.List(pl.String)},
         ),
     )
+
+
+def carve_version(version: str, zone: str = "UTC") -> str:
+    """A carve step's code version: its cruncher's, the carved schemas, and conform's."""
+    return fingerprint.code_version(f"{version}-{VERSION}", *carved(zone).values())

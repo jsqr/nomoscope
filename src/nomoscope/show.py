@@ -30,7 +30,7 @@ def listing(cfg: Settings, known: Registry) -> list[StepLine]:
     found = drafting.load(cfg)
     planned: list[Planned] = []
     with store.open(read_only=True) as conn:
-        for routed in runner.plans(conn, known, routes):
+        for routed in runner.plans(cfg, conn, known, routes):
             planned.extend(routed.planned)
         planned.append(reference.plan(reference.tables(cfg)))
         planned.extend(

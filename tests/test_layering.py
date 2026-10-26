@@ -9,6 +9,7 @@ LAYERS = [
     {"errors", "parquet", "partition", "settings"},
     {"graph"},
     {"snarf"},
+    {"structure"},
     {"crunch"},
     {"derive"},
     {"catalog"},

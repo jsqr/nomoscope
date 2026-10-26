@@ -10,7 +10,7 @@ from typing import Annotated
 
 import typer
 
-from nomoscope.cli import crunch, derive, graph, query, snarf
+from nomoscope.cli import crunch, derive, grammar, graph, query, snarf
 from nomoscope.crunch.registry import Registry
 
 
@@ -26,6 +26,6 @@ def app(registry: Registry, name: str) -> typer.Typer:
         )
         logging.getLogger("httpx").setLevel(logging.DEBUG if verbose else logging.WARNING)
 
-    for module in (snarf, crunch, derive, query, graph):
+    for module in (snarf, crunch, grammar, derive, query, graph):
         module.add(built, registry, name)
     return built

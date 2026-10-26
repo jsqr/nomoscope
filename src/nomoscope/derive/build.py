@@ -3,7 +3,8 @@
 There is one derive step per jurisdiction. Its inputs are the carve steps
 of the jurisdiction's records, from every source, and the drafting
 conventions. A record's carve step is the one of the cruncher it routes
-to now.
+to now. A carve that records `admitted: false` in its details is held:
+it is not an input until a later carve of the record admits it.
 
 If the only change is new publications, they are folded onto the stored
 datasets, and subdivisions and segments of unchanged versions are kept.
@@ -27,7 +28,7 @@ from nomoscope.derive import datasets, registry, segment
 from nomoscope.derive.conventions import Conventions
 from nomoscope.derive.datasets import Carved, Reuse
 from nomoscope.graph import fingerprint, records, steps
-from nomoscope.graph.steps import CARVE, DERIVE, Input, Planned, Staleness, StepKey
+from nomoscope.graph.steps import CARVE, CONFIG, DERIVE, Input, Planned, Staleness, StepKey
 from nomoscope.graph.store import Store
 from nomoscope.parquet import write_parquet
 from nomoscope.partition import dataset_path
@@ -39,7 +40,6 @@ log = logging.getLogger(__name__)
 VERSION = "2"
 FOLD = "fold"
 REFOLD = "refold"
-CONFIG = "config"
 
 
 def code_version(settings: segment.Settings) -> str:
@@ -85,7 +85,7 @@ def plan(
         stored = carves.setdefault(name, steps.stored(conn, CARVE, name))
         for row in routed:
             carve = stored.get(row.record)
-            if carve is not None:
+            if carve is not None and steps.admitted(carve):
                 by_jurisdiction[row.jurisdiction].append(
                     Input(CARVE, name, row.record, carve.fingerprint)
                 )

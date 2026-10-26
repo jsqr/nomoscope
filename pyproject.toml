@@ -11,12 +11,24 @@ dependencies = [
   "duckdb>=1.4.2",
   "httpx",
   "polars[pyarrow]",
+  "pydantic>=2.14",
+  "pypdf>=6",
+  "tomli-w>=1.2",
   "typer",
+]
+
+[project.optional-dependencies]
+# grammar infer: a billed chat-model call.
+infer = [
+  "httpx2>=2.13.1",
+  "mistralai>=3.1",
+  "pydantic-ai-slim[mistral]>=2.54.0",
 ]
 
 [dependency-groups]
 dev = [
   "basedpyright",
+  "nomoscope[infer]",
   "pytest",
   "ruff",
 ]

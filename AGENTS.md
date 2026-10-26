@@ -19,14 +19,15 @@ jurisdictions, project specs or results. Those belong in project repos.
 | `src/nomoscope/{errors,parquet,partition,settings}.py` | Errors, parquet writes, partition paths, settings |
 | `src/nomoscope/graph/` | The graph store: records, steps, and staleness |
 | `src/nomoscope/snarf/` | Sources, feeds, fetching, and local import |
-| `src/nomoscope/crunch/` | The registry, routing, the carved schemas, and the runner |
+| `src/nomoscope/structure/` | Lines, bookmarks, grammars, the parser, and checks for printed codes |
+| `src/nomoscope/crunch/` | The registry, routing, the carved schemas, the runner, and the grammared cruncher |
 | `src/nomoscope/derive/` | The ledger, the datasets, conventions, parsers, segments, and the build step |
 | `src/nomoscope/catalog/` | The DuckDB catalog |
 | `src/nomoscope/cli/`, `status.py`, `show.py` | The command, built with `cli.app(registry, name)` |
 | `tests/fake.py` | A fake source and cruncher for the tests |
 
 Packages import only from their own layer or below: the bottom modules,
-then `graph`, `snarf`, `crunch`, `derive`, `catalog`, and the command
+then `graph`, `snarf`, `structure`, `crunch`, `derive`, `catalog`, and the command
 modules. `tests/test_layering.py` checks this.
 
 ## Rules by stage
@@ -53,11 +54,18 @@ root, and is rebuilt whole.
 ## What a project supplies
 
 - A `Registry` of `Source`s and crunchers, passed to `cli.app(registry,
-  name)`. A cruncher implements the `Cruncher` protocol, or is a `Carver`.
-- In its config root: `crunchers.csv`, `conventions/`, and
-  `jurisdictions.csv`.
+  name)`. A cruncher implements the `Cruncher` protocol, or is a `Carver`,
+  or a `GrammarCruncher` with a reader for its format.
+- In its config root: `crunchers.csv`, `conventions/`,
+  `jurisdictions.csv`, and `grammars/` for a `GrammarCruncher`.
 
 `tests/fake.py` is the smallest example.
+
+## Paid calls
+
+`grammar infer` sends a page sample to a chat model and is billed per
+token. An agent runs it only with `--dry-run`, which prints the page and
+token count, and leaves the paid run to a person. Tests never call a model.
 
 ## The graph store
 

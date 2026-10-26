@@ -19,8 +19,8 @@ from nomoscope.crunch.layout import Layout
 from nomoscope.crunch.registry import Registry
 from nomoscope.crunch.results import CrunchResult, TableResult
 from nomoscope.crunch.routes import Routes
-from nomoscope.graph import fingerprint, steps
 from nomoscope.graph import records as graph_records
+from nomoscope.graph import steps
 from nomoscope.graph.records import RecordRow, Registration
 from nomoscope.graph.steps import CARVE, CRUNCH, Input, Planned, Staleness, StepKey, TableRow
 from nomoscope.graph.store import Store
@@ -74,6 +74,7 @@ class Routed:
 
 
 def plans(
+    cfg: Settings,
     conn: duckdb.DuckDBPyConnection,
     registry: Registry,
     routes: Routes,
@@ -91,7 +92,8 @@ def plans(
             continue
         cruncher = registry.cruncher(name)
         rows = by_name[name]
-        found.append(Routed(name, {r.record: r for r in rows}, tuple(cruncher.plan(name, rows))))
+        planned = tuple(cruncher.plan(cfg, name, rows))
+        found.append(Routed(name, {r.record: r for r in rows}, planned))
     return found
 
 
@@ -113,7 +115,7 @@ def crunch(
     routes = routing.load(cfg)
     only = set(units) if units is not None else None
     with store.open(read_only=True) as conn:
-        found = plans(conn, registry, routes, names)
+        found = plans(cfg, conn, registry, routes, names)
         state = steps.classify(cfg, conn, [p for r in found for p in r.planned])
     results = []
     for r in found:
@@ -131,14 +133,20 @@ def crunch(
 def pending(
     cfg: Settings, conn: duckdb.DuckDBPyConnection, registry: Registry, routes: Routes
 ) -> dict[str, dict[str, int]]:
-    """Count each cruncher's steps by state, from the store alone."""
-    found = plans(conn, registry, routes)
+    """Count each cruncher's steps by state, from the store alone.
+
+    "held" counts the carves that derive does not read (`steps.admitted`).
+    """
+    found = plans(cfg, conn, registry, routes)
     state = steps.classify(cfg, conn, [p for r in found for p in r.planned], check_outputs=False)
     counts: dict[str, dict[str, int]] = {}
     for r in found:
         tally = counts.setdefault(r.name, {})
         for p in r.planned:
             tally[state[p.key].value] = tally.get(state[p.key].value, 0) + 1
+        held = sum(1 for s in steps.stored(conn, CARVE, r.name).values() if not steps.admitted(s))
+        if held:
+            tally["held"] = held
     return counts
 
 
@@ -225,8 +233,8 @@ class Carver:
     version: str
     zone: str = "UTC"
 
-    def plan(self, name: str, rows: Sequence[RecordRow]) -> list[Planned]:
-        version = fingerprint.code_version(self.version, *schemas.carved(self.zone).values())
+    def plan(self, cfg: Settings, name: str, rows: Sequence[RecordRow]) -> list[Planned]:
+        version = schemas.carve_version(self.version, self.zone)
         return record_plan(name, rows, version, stage=CARVE)
 
     def run(
