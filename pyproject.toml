@@ -1,7 +1,7 @@
 [project]
 name = "nomoscope"
 version = "0.1.0"
-description = "Archive, carve, and track the history of published law."
+description = "Archive, tabulate, and track the history of published law."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]

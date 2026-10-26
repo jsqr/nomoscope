@@ -25,7 +25,7 @@ B = Input("record", "src", "r2", "b" * 64)
 WHEN = datetime(2026, 9, 1, 12, tzinfo=UTC)
 
 
-def planned(unit="r1", inputs=(A, B), code="1", stage="carve", scope="src"):
+def planned(unit="r1", inputs=(A, B), code="1", stage="tabulate", scope="src"):
     return Planned(StepKey(stage, scope, unit), tuple(inputs), code)
 
 
@@ -48,7 +48,7 @@ def test_the_fingerprint_depends_on_input_order_scope_and_code_version():
     moved = Input("record", "other", "r1", "a" * 64)
     assert planned(inputs=(A,)).fingerprint != planned(inputs=(moved,)).fingerprint
     assert planned().input_fingerprint == planned(code="2").input_fingerprint
-    assert planned().input == Input("carve", "src", "r1", planned().fingerprint)
+    assert planned().input == Input("tabulate", "src", "r1", planned().fingerprint)
 
 
 def test_columns_fingerprint_sees_names_and_dtypes():
@@ -96,7 +96,7 @@ def test_a_recorded_table_carries_the_size_of_the_file_written(cfg, graph):
     assert table.bytes == path.stat().st_size
     with graph.open() as conn:
         steps.record(conn, planned(), [table])
-        assert steps.tables(conn, StepKey("carve", "src", "r1")) == [table]
+        assert steps.tables(conn, StepKey("tabulate", "src", "r1")) == [table]
 
 
 def test_recording_a_step_again_replaces_its_edges_and_tables(cfg, graph):
@@ -105,11 +105,11 @@ def test_recording_a_step_again_replaces_its_edges_and_tables(cfg, graph):
     with graph.open() as conn:
         steps.record(conn, planned(inputs=(A, B)), [first])
         steps.record(conn, planned(inputs=(B,)), [second])
-        key = StepKey("carve", "src", "r1")
+        key = StepKey("tabulate", "src", "r1")
         assert steps.inputs_of(conn, key) == [B]
         assert steps.tables(conn, key) == [second]
-        assert steps.units(conn, "carve", "src") == ["r1"]
-        [row] = steps.stored(conn, "carve", "src").values()
+        assert steps.units(conn, "tabulate", "src") == ["r1"]
+        [row] = steps.stored(conn, "tabulate", "src").values()
         assert row.fingerprint == planned(inputs=(B,)).fingerprint
 
 

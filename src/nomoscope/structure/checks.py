@@ -40,8 +40,8 @@ def _enum(node: Row) -> en.Enumerator:
     return en.Enumerator(node["style"], node["ordinal"], node["sub"])
 
 
-def uncarved(nodes: list[Row], grammar: gr.Grammar) -> set[str]:
-    """The ids of subdivisions outside every carved section, such as a preface's list.
+def untabulated(nodes: list[Row], grammar: gr.Grammar) -> set[str]:
+    """The ids of subdivisions outside every tabulated section, such as a preface's list.
 
     The structure checks skip them: nothing of theirs reaches derive.
     """
@@ -63,7 +63,7 @@ def sequence(nodes: list[Row], grammar: gr.Grammar) -> list[Row]:
     """Siblings that do not start at a first value or do not follow in order."""
     modes = {lv.name: lv.sequence for lv in grammar.levels}
     by_id = {n["id"]: n for n in nodes}
-    skipped = uncarved(nodes, grammar)
+    skipped = untabulated(nodes, grammar)
     groups: dict[tuple[str | None, str], list[Row]] = {}
     for n in nodes:
         if n["id"] in skipped:
@@ -236,7 +236,7 @@ def depth(nodes: list[Row], grammar: gr.Grammar) -> list[Row]:
     rank = {name: i for i, name in enumerate(subs)}
     by_id = {n["id"]: n for n in nodes}
     out = []
-    skipped = uncarved(nodes, grammar)
+    skipped = untabulated(nodes, grammar)
     for n in nodes:
         if n["kind"] != "subdivision" or n["level"] not in rank or n["id"] in skipped:
             continue
@@ -291,7 +291,7 @@ def labels(
 
 def unsectioned(nodes: list[Row], grammar: gr.Grammar) -> list[Row]:
     """Numbered divisions above the section level with no division under them,
-    but with subdivisions or text: law that is not carved, unless
+    but with subdivisions or text: law that is not tabulated, unless
     `[sections] levels` names the level.
 
     Unnumbered divisions, such as a preface or a disposition table, are
@@ -329,7 +329,7 @@ def scheme(nodes: list[Row], grammar: gr.Grammar) -> list[Row]:
         return []
     by_id = {n["id"]: n for n in nodes}
     orders: dict[str, dict[int, str]] = {}
-    skipped = uncarved(nodes, grammar)
+    skipped = untabulated(nodes, grammar)
     for n in nodes:
         if n["kind"] != "subdivision" or n["level"] == parse.RUN_IN or n["style"] is None:
             continue

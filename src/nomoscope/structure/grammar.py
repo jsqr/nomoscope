@@ -203,7 +203,7 @@ class Sections(BaseModel):
     )
     levels: list[str] = Field(
         default=[],
-        description="Division levels above the section that are carved as sections when "
+        description="Division levels above the section that are tabulated as sections when "
         "no division is under them, such as a definitions chapter without sections",
     )
 

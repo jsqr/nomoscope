@@ -241,7 +241,7 @@ def test_a_last_item_keeps_its_own_lines():
     assert spans(ELEC_6000, parse(ELEC_6000))[0].endswith("Federal Election Campaign Act.")
 
 
-def test_from_carved():
+def test_from_tabulated():
     rows = [
         {"path": "B", "level": "subsection", "style": "upper_alpha", "number": "B",
          "start_char": 30, "end_char": 40},
@@ -252,7 +252,7 @@ def test_from_carved():
         {"path": "A/building", "level": "run_in", "style": None, "number": "BUILDING —",
          "start_char": 20, "end_char": 29},
     ]  # fmt: skip
-    found = subdivide.from_carved(rows)
+    found = subdivide.from_tabulated(rows)
     assert [d.path for d in found] == [("A",), ("A", "1"), ("A", "building"), ("B",)]
     assert [d.parent for d in found] == [None, 0, 0, None]
     assert [d.position for d in found] == [1, 1, 2, 2]

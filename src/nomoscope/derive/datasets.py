@@ -1,4 +1,4 @@
-"""Build one jurisdiction's derived datasets from its carved tables.
+"""Build one jurisdiction's derived datasets from its tabulated tables.
 
 Each publication's rows are recorded in five ledgers (see ledger):
 
@@ -236,8 +236,8 @@ HEADING_RANGE = r"\s*\[[^\]]*\]\s*$"
 
 
 @dataclass(frozen=True)
-class Carved:
-    """One publication's carved tables."""
+class Tabulated:
+    """One publication's tabulated tables."""
 
     source: str
     publication: pl.DataFrame
@@ -261,14 +261,14 @@ def empty(schema: pl.Schema) -> pl.DataFrame:
     return pl.DataFrame(schema=schema)
 
 
-def sighted(carved: Carved, jurisdiction: str) -> Ledgers:
-    pub = carved.publication.row(0, named=True)
+def sighted(tabulated: Tabulated, jurisdiction: str) -> Ledgers:
+    pub = tabulated.publication.row(0, named=True)
     stamp = {
         "publication": pub["publication"],
         "on": pub["published_date"],
         "completeness": pub["completeness"],
     }
-    sections, nodes = carved.sections, carved.nodes
+    sections, nodes = tabulated.sections, tabulated.nodes
     return Ledgers(
         sections=ledger.sightings(sections, SECTION_KEY, **stamp) if sections is not None else None,
         payload=(
@@ -292,13 +292,13 @@ def sighted(carved: Carved, jurisdiction: str) -> Ledgers:
         ancestors=ledger.sightings(
             ancestor_edges(sections, nodes, jurisdiction), ANCESTOR_KEY, **stamp
         ),
-        publications=carved.publication.with_columns(
-            pl.lit(carved.source).alias("source"),
+        publications=tabulated.publication.with_columns(
+            pl.lit(tabulated.source).alias("source"),
             pl.lit(sections.height if sections is not None else 0, dtype=pl.Int64).alias(
                 "sections"
             ),
         ).select(PUBLICATION_SCHEMA.names()),
-        sessions=carved.sessions,
+        sessions=tabulated.sessions,
     )
 
 
@@ -322,10 +322,12 @@ def merged(a: Ledgers, b: Ledgers) -> Ledgers:
     )
 
 
-def folded(carved: Sequence[Carved], jurisdiction: str, onto: Ledgers | None = None) -> Ledgers:
+def folded(
+    tabulated: Sequence[Tabulated], jurisdiction: str, onto: Ledgers | None = None
+) -> Ledgers:
     """Fold each publication's ledgers onto onto."""
     found = onto
-    for c in carved:
+    for c in tabulated:
         one = sighted(c, jurisdiction)
         found = one if found is None else merged(found, one)
     if found is None:
@@ -340,7 +342,7 @@ def stored_ledgers(stored: Mapping[str, pl.DataFrame]) -> Ledgers:
         frame = stored.get(dataset)
         return frame.select(*columns, *SEEN.names()) if frame is not None and frame.height else None
 
-    # The stored effective_date is derived. The payload is the carved value,
+    # The stored effective_date is derived. The payload is the tabulated value,
     # kept in effective_column.
     payload = [
         pl.col("effective_column").alias(c) if c == "effective_date" else pl.col(c)
@@ -409,7 +411,7 @@ def publications(found: Ledgers) -> pl.DataFrame:
 
 
 def sessions(found: Ledgers, jurisdiction: str) -> pl.DataFrame:
-    """The sessions the carves state, the latest statement of each, plus any
+    """The sessions the tabulations state, the latest statement of each, plus any
     session a publication names.
     """
     stated = (
@@ -549,17 +551,17 @@ Parsed = Mapping[str, list[subdivide.Division]]
 
 
 def parsed_versions(versions: pl.DataFrame) -> dict[str, list[subdivide.Division]]:
-    """Each version's subdivisions, by version id: the carved ones where the
+    """Each version's subdivisions, by version id: the tabulated ones where the
     cruncher gave them, else parsed from the text.
     """
     columns = ["id", "text", "line_indents", "subdivisions"]
     return {
         version_id: (
-            subdivide.from_carved(carved)
-            if carved is not None
+            subdivide.from_tabulated(tabulated)
+            if tabulated is not None
             else subdivide.parse(text or "", indents)
         )
-        for version_id, text, indents, carved in versions.select(columns).iter_rows()
+        for version_id, text, indents, tabulated in versions.select(columns).iter_rows()
     }
 
 

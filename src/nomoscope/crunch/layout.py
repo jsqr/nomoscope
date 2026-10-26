@@ -1,7 +1,7 @@
 """Paths a cruncher writes to, under crunched/<cruncher>/:
 
 <table>/publication=<unit>/data.parquet           snapshot tables
-carved/<table>/publication=<record>/data.parquet  carved tables
+tabulated/<table>/publication=<record>/data.parquet  tabulated tables
 """
 
 from dataclasses import dataclass
@@ -25,8 +25,10 @@ class Layout:
     def snapshot_table(self, cfg: Settings, table: str, record_id: str) -> Path:
         return partition_path(self.root(cfg) / table, {"publication": record_id}) / DATA_FILE
 
-    def carved_root(self, cfg: Settings) -> Path:
-        return self.root(cfg) / "carved"
+    def tabulated_root(self, cfg: Settings) -> Path:
+        return self.root(cfg) / "tabulated"
 
-    def carved_table(self, cfg: Settings, table: str, record_id: str) -> Path:
-        return partition_path(self.carved_root(cfg) / table, {"publication": record_id}) / DATA_FILE
+    def tabulated_table(self, cfg: Settings, table: str, record_id: str) -> Path:
+        return (
+            partition_path(self.tabulated_root(cfg) / table, {"publication": record_id}) / DATA_FILE
+        )

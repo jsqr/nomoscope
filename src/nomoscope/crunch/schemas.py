@@ -1,4 +1,4 @@
-"""The carved tables: what every cruncher writes, and their schemas.
+"""The tabulated tables: what every cruncher writes, and their schemas.
 
 Each table has one partition per publication:
 
@@ -52,7 +52,7 @@ SUBDIVISIONS = pl.List(
 COMPLETENESS = ("full", "partial")
 
 
-def carved(zone: str) -> dict[str, pl.Schema]:
+def tabulated(zone: str) -> dict[str, pl.Schema]:
     when = pl.Datetime("us", zone)
     return {
         LAW_SECTIONS: pl.Schema(
@@ -137,7 +137,7 @@ REQUIRED = {
 
 
 # Bump when conform gives different output for the same frame, so every
-# carve reruns.
+# tabulate reruns.
 VERSION = "2"
 
 
@@ -146,10 +146,10 @@ def conform(table: str, frame: pl.DataFrame, zone: str = "UTC") -> pl.DataFrame:
 
     Normalizes section text, and computes text_sha256 if the frame has none.
     """
-    schema = carved(zone)[table]
+    schema = tabulated(zone)[table]
     extra = set(frame.columns) - set(schema.names())
     if extra:
-        raise CrunchError(f"{table}: columns not in the carved schema: {sorted(extra)}")
+        raise CrunchError(f"{table}: columns not in the tabulated schema: {sorted(extra)}")
     missing = [c for c in REQUIRED[table] if c not in frame.columns]
     if missing:
         raise CrunchError(f"{table}: missing required columns {missing}")
@@ -233,6 +233,6 @@ def publication(
     )
 
 
-def carve_version(version: str, zone: str = "UTC") -> str:
-    """A carve step's code version: its cruncher's, the carved schemas, and conform's."""
-    return fingerprint.code_version(f"{version}-{VERSION}", *carved(zone).values())
+def tabulate_version(version: str, zone: str = "UTC") -> str:
+    """A tabulate step's code version: its cruncher's, the tabulated schemas, and conform's."""
+    return fingerprint.code_version(f"{version}-{VERSION}", *tabulated(zone).values())

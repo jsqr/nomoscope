@@ -4,8 +4,8 @@ crunchers, the segment settings derive uses, and the directory of drafting
 conventions.
 
 A cruncher plans and runs steps over the records routed to it. For each
-record it carves, it must write a carve step keyed (carve, <cruncher>,
-<record>) with runner.write_carved. Derive reads only those steps.
+record it tabulates, it must write a tabulate step keyed (tabulate, <cruncher>,
+<record>) with runner.write_tabulated. Derive reads only those steps.
 """
 
 from collections.abc import Mapping, Sequence

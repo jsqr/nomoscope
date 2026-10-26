@@ -27,7 +27,7 @@ from nomoscope.graph.records import RECORD, RecordRow
 from nomoscope.settings import Settings
 
 CRUNCH = "crunch"
-CARVE = "carve"
+TABULATE = "tabulate"
 DERIVE = "derive"
 REFERENCE = "reference"
 # A config file read by a step; not a step itself.
@@ -106,7 +106,7 @@ class Stored:
 
 
 def admitted(step: Stored) -> bool:
-    """Whether derive may read a carve: one that records admitted false is held."""
+    """Whether derive may read a tabulation: one that records admitted false is held."""
     return not step.details or step.details.get("admitted") is not False
 
 

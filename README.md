@@ -2,7 +2,7 @@
 
 nomoscope is a library that organizes legal authorities, tracks changes,
 and enables systematic queries and processing. It fetches or imports
-each publication of a code and carves it into tables. For each section
+each publication of a code and tabulates it into tables. For each section
 it records every distinct text, the publications that carried it, the
 dates its history states, and when it was in force. The tables are parquet
 files, queried through DuckDB or polars.
@@ -10,7 +10,7 @@ files, queried through DuckDB or polars.
 A project that uses nomoscope should supply:
 
 - **Sources and crunchers:** code that fetches a publisher's files and
-  turns them into the carved tables, passed to nomoscope in a `Registry`.
+  turns them into the tabulated tables, passed to nomoscope in a `Registry`.
 - **In the same registry:** which cruncher reads each code, the segment
   settings, and the directories of grammars and drafting conventions.
 - **A data root:** a directory outside the repository for the archive and
@@ -36,13 +36,13 @@ A project constructs its command-line interface from its registry:
 
 ```python
 # myproject/cli.py
-from nomoscope import Carver, Registry, cli
+from nomoscope import Tabulator, Registry, cli
 
 from myproject import publisher
 
 REGISTRY = Registry(
     sources={"publisher": publisher.SOURCE},
-    crunchers={"springfield-municipal": Carver(publisher.carve_municipal, "1")},
+    crunchers={"springfield-municipal": Tabulator(publisher.tabulate_municipal, "1")},
 )
 app = cli.app(REGISTRY, "myproject")
 ```
@@ -69,7 +69,7 @@ Commands:
 ```bash
 myproject snarf due                      # fetch the feeds due today
 myproject snarf import publisher FILE -f FEED -p jurisdiction=us-il-springfield
-myproject crunch                         # carve new records
+myproject crunch                         # tabulate new records
 myproject derive                         # build the derived tables
 myproject status                         # show what has run
 myproject sql "SELECT section_num, text FROM law_at('us-il-springfield', DATE '2024-07-01')"

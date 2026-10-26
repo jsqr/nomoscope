@@ -2,8 +2,8 @@
 
 Each record has two steps. Parse reads the record, parses it, runs the
 checks, and writes the snapshot tables `parse_lines`, `parse_nodes`,
-and `parse_findings`. The grammar file is one of its inputs. Carve
-writes the carved tables and records whether derive may read them
+and `parse_findings`. The grammar file is one of its inputs. Tabulate
+writes the tabulated tables and records whether derive may read them
 (`steps.admitted`): only once a person has accepted a record of the code
 (`reviews`), no check has more findings than they accepted, and, for the
 record they accepted, no section has changed since. Other records of the
@@ -26,11 +26,11 @@ from nomoscope.crunch import routes as routing
 from nomoscope.crunch.layout import Layout
 from nomoscope.crunch.registry import Registry
 from nomoscope.crunch.results import CrunchResult
-from nomoscope.crunch.runner import record_plan, write_carved, write_snapshot
+from nomoscope.crunch.runner import record_plan, write_snapshot, write_tabulated
 from nomoscope.graph import fingerprint
 from nomoscope.graph import records as graph_records
 from nomoscope.graph.records import RECORD, RecordRow
-from nomoscope.graph.steps import CARVE, CONFIG, CRUNCH, Input, Planned, StepKey
+from nomoscope.graph.steps import CONFIG, CRUNCH, TABULATE, Input, Planned, StepKey
 from nomoscope.graph.store import Store
 from nomoscope.settings import Settings
 from nomoscope.snarf import archive, attach
@@ -111,7 +111,7 @@ def grammar_input(grammars: Path | None, row: RecordRow) -> Input:
 
 
 def review_input(cfg: Settings, row: RecordRow) -> Input:
-    """The code's review in force, as an input of the carve step."""
+    """The code's review in force, as an input of the tabulate step."""
     found = reviews.latest(cfg, row.source, row.jurisdiction, row.code)
     unit = f"{row.source}/{row.jurisdiction}/{row.code}"
     # Like a config file, a review is outside the store, which keeps no hash of it.
@@ -125,7 +125,7 @@ def in_force(cfg: Settings, row: RecordRow) -> tuple[reviews.Review | None, pl.D
 
 
 def since_review(
-    review: reviews.Review | None, accepted: pl.DataFrame | None, record: str, carved: list[Row]
+    review: reviews.Review | None, accepted: pl.DataFrame | None, record: str, tabulated: list[Row]
 ) -> list[Row] | None:
     """Sections changed since the review; none for a record other than the reviewed one.
 
@@ -135,7 +135,7 @@ def since_review(
         return None
     if record != review.record:
         return []
-    return reviews.changes(accepted, reviews.summary(carved))
+    return reviews.changes(accepted, reviews.summary(tabulated))
 
 
 def load_grammar(grammars: Path | None, row: RecordRow) -> gr.Grammar:
@@ -174,7 +174,7 @@ def parsed(grammar: gr.Grammar, doc: Document) -> tuple[list[Row], list[Row]]:
 def admission(
     review: reviews.Review | None, counts: Mapping[str, int], changes: list[Row] | None
 ) -> dict[str, object]:
-    """Whether derive may read a carve."""
+    """Whether derive may read a tabulation."""
     worse = checks.worse(dict(counts), review.findings) if review else {}
     return {
         "admitted": review is not None and not worse and not changes,
@@ -186,7 +186,7 @@ def admission(
 
 
 def held(a: Mapping[str, object]) -> str:
-    """Why derive leaves a carve out, or "admitted"."""
+    """Why derive leaves a tabulation out, or "admitted"."""
     if a["admitted"]:
         return "admitted"
     reasons = []
@@ -220,17 +220,17 @@ def check(
 ) -> Checked:
     nodes, found = parsed(grammar, doc)
     levels = Counter(n["level"] for n in nodes if n["kind"] != "root")
-    carved = sections.carve(nodes, doc.lines, grammar)
+    tabulated = sections.tabulate(nodes, doc.lines, grammar)
     marks = pl.DataFrame(doc.marks)
     outline = checks.outline_summary(nodes, marks, grammar) if doc.marks else None
-    changes = since_review(review, accepted, record, carved.sections)
+    changes = since_review(review, accepted, record, tabulated.sections)
     a = admission(review, checks.counts(found), changes)
-    return Checked(dict(levels), carved.sections, found, a, outline, changes)
+    return Checked(dict(levels), tabulated.sections, found, a, outline, changes)
 
 
 @dataclass(frozen=True)
 class GrammarCruncher:
-    """Parse each record with its grammar, then carve. Bump `version` when output changes."""
+    """Parse each record with its grammar, then tabulate. Bump `version` when output changes."""
 
     read: Reader
     version: str
@@ -241,7 +241,7 @@ class GrammarCruncher:
     def plan(self, cfg: Settings, name: str, rows: Sequence[RecordRow]) -> list[Planned]:
         version = f"{self.version}-{structure.VERSION}"
         parse_version = fingerprint.code_version(f"{version}-parse", *SNAPSHOTS.values())
-        carve_version = schemas.carve_version(version, self.zone)
+        tabulate_version = schemas.tabulate_version(version, self.zone)
         attached = {source: attach.index(cfg, source) for source in {r.source for r in rows}}
 
         def inputs(r: RecordRow) -> tuple[Input, ...]:
@@ -255,8 +255,10 @@ class GrammarCruncher:
         for p in record_plan(name, rows, parse_version, extra=inputs):
             planned.append(p)
             row = by_record[p.key.unit]
-            carve_inputs = (p.input, review_input(cfg, row))
-            planned.append(Planned(StepKey(CARVE, name, p.key.unit), carve_inputs, carve_version))
+            tabulate_inputs = (p.input, review_input(cfg, row))
+            planned.append(
+                Planned(StepKey(TABULATE, name, p.key.unit), tabulate_inputs, tabulate_version)
+            )
         return planned
 
     def run(
@@ -269,7 +271,7 @@ class GrammarCruncher:
         row = rows[planned.key.unit]
         if planned.key.stage == CRUNCH:
             return self.parse(cfg, store, planned, row)
-        return self.carve(cfg, store, planned, row)
+        return self.tabulate(cfg, store, planned, row)
 
     def parse(self, cfg: Settings, store: Store, planned: Planned, row: RecordRow) -> CrunchResult:
         record = archive.find(cfg.snarfed, row.source, row.record)
@@ -285,30 +287,32 @@ class GrammarCruncher:
         tables = write_snapshot(cfg, store, planned, built, details)
         return CrunchResult(planned.key.scope, CRUNCH, row.record, row.jurisdiction, tables)
 
-    def carve(self, cfg: Settings, store: Store, planned: Planned, row: RecordRow) -> CrunchResult:
+    def tabulate(
+        self, cfg: Settings, store: Store, planned: Planned, row: RecordRow
+    ) -> CrunchResult:
         lay = Layout(planned.key.scope)
         read = {
             name: pl.read_parquet(lay.snapshot_table(cfg, name, row.record)) for name in SNAPSHOTS
         }
         grammar = load_grammar(self.grammars, row)
         lines = read[PARSE_LINES].sort("index").to_dicts()
-        carved = sections.carve(read[PARSE_NODES].to_dicts(), lines, grammar)
+        tabulated = sections.tabulate(read[PARSE_NODES].to_dicts(), lines, grammar)
         blob = lines[0]["sha256"] if lines else None
         common = {"jurisdiction": row.jurisdiction, "law_code": row.code}
         record = archive.find(cfg.snarfed, row.source, row.record)
         built = {
-            schemas.LAW_SECTIONS: section_frame(carved.sections, common, blob),
-            schemas.LAW_NODES: node_frame(carved.nodes, common),
+            schemas.LAW_SECTIONS: section_frame(tabulated.sections, common, blob),
+            schemas.LAW_NODES: node_frame(tabulated.nodes, common),
             schemas.LAW_PUBLICATIONS: schemas.publication(
                 row, [row.code], self.stated(cfg, row, record)
             ),
         }
         counts = checks.counts(read[PARSE_FINDINGS].to_dicts())
         review, accepted = in_force(cfg, row)
-        changes = since_review(review, accepted, row.record, carved.sections)
+        changes = since_review(review, accepted, row.record, tabulated.sections)
         details = admission(review, counts, changes)
-        tables = write_carved(cfg, store, planned, built, self.zone, details)
-        return CrunchResult(planned.key.scope, CARVE, row.record, row.jurisdiction, tables)
+        tables = write_tabulated(cfg, store, planned, built, self.zone, details)
+        return CrunchResult(planned.key.scope, TABULATE, row.record, row.jurisdiction, tables)
 
 
 SECTION_COLUMNS = (
@@ -334,14 +338,14 @@ NODE_COLUMNS = (
 
 
 def section_frame(found: list[Row], common: Mapping[str, str], blob: str | None) -> pl.DataFrame:
-    schema = schemas.carved("UTC")[schemas.LAW_SECTIONS]
+    schema = schemas.tabulated("UTC")[schemas.LAW_SECTIONS]
     cols = ("jurisdiction", "law_code", *SECTION_COLUMNS, "blob_sha256")
     rows = [{**common, **{c: s[c] for c in SECTION_COLUMNS}, "blob_sha256": blob} for s in found]
     return pl.DataFrame(rows, schema={c: schema[c] for c in cols})
 
 
 def node_frame(found: list[Row], common: Mapping[str, str]) -> pl.DataFrame:
-    schema = schemas.carved("UTC")[schemas.LAW_NODES]
+    schema = schemas.tabulated("UTC")[schemas.LAW_NODES]
     cols = ("jurisdiction", "law_code", *NODE_COLUMNS)
     rows = [{**common, **{c: n[c] for c in NODE_COLUMNS}} for n in found]
     return pl.DataFrame(rows, schema={c: schema[c] for c in cols})

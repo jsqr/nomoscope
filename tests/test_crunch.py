@@ -8,7 +8,7 @@ from nomoscope import cli, settings
 from nomoscope.crunch import CrunchError, runner, schemas
 from nomoscope.crunch.layout import Layout
 from nomoscope.graph import records, steps
-from nomoscope.graph.steps import CARVE, Planned, Staleness, StepKey
+from nomoscope.graph.steps import TABULATE, Planned, Staleness, StepKey
 from nomoscope.graph.store import Store
 from tests import fake
 
@@ -56,13 +56,13 @@ def test_conform_fills_casts_and_orders():
         }
     )
     got = schemas.conform(schemas.LAW_SECTIONS, frame)
-    assert got.columns == schemas.carved("UTC")[schemas.LAW_SECTIONS].names()
+    assert got.columns == schemas.tabulated("UTC")[schemas.LAW_SECTIONS].names()
     assert got["text_sha256"][0] == schemas.text_sha256("x")
     assert got["effective_date"].dtype == pl.Date and got["drafting"][0] is None
 
 
 def test_conform_refuses_unknown_and_missing_columns():
-    with pytest.raises(CrunchError, match="not in the carved schema"):
+    with pytest.raises(CrunchError, match="not in the tabulated schema"):
         schemas.conform(schemas.LAW_NODES, pl.DataFrame({"jurisdiction": ["us"], "bogus": [1]}))
     with pytest.raises(CrunchError, match="missing required"):
         schemas.conform(schemas.LAW_SECTIONS, pl.DataFrame({"text": ["x"]}))
@@ -95,12 +95,12 @@ def test_a_publication_dates_itself_where_it_says_and_names_the_basis():
     )
 
 
-def test_carved_tables_are_partitioned_by_publication(tmp_path):
+def test_tabulated_tables_are_partitioned_by_publication(tmp_path):
     cfg = settings.Settings(data_root=tmp_path)
-    got = Layout("fake").carved_table(cfg, "law_sections", "2026-09-01T120000Z-aaaaaaaa")
+    got = Layout("fake").tabulated_table(cfg, "law_sections", "2026-09-01T120000Z-aaaaaaaa")
     assert got == (
         tmp_path
-        / "sources/crunched/fake/carved/law_sections"
+        / "sources/crunched/fake/tabulated/law_sections"
         / "publication=2026-09-01T120000Z-aaaaaaaa/data.parquet"
     )
 
@@ -117,7 +117,7 @@ def imported(tmp_path, text, name="code.txt", **params):
     assert out.exit_code == 0, out.output
 
 
-def test_the_fake_source_carves_an_import_once(cfg, tmp_path):
+def test_the_fake_source_tabulates_an_import_once(cfg, tmp_path):
     imported(tmp_path, FIRST)
     out = invoke("crunch")
     assert out.exit_code == 0, out.output
@@ -127,7 +127,7 @@ def test_the_fake_source_carves_an_import_once(cfg, tmp_path):
         [rec] = records.records(conn, "fake")
         [routed] = runner.plans(cfg, conn, fake.REGISTRY, fake.REGISTRY.routes)
         state = steps.classify(cfg, conn, routed.planned)
-        tables = steps.tables(conn, StepKey(CARVE, "fake", rec.record))
+        tables = steps.tables(conn, StepKey(TABULATE, "fake", rec.record))
     assert set(state.values()) == {Staleness.FRESH}
     assert {t.name for t in tables} == {"law_sections", "law_nodes", "law_publications"}
     sections = pl.read_parquet(cfg.data_root / tables[2].path)
@@ -145,7 +145,7 @@ def test_the_fake_source_carves_an_import_once(cfg, tmp_path):
     assert forced.exit_code == 0 and rec.record in forced.output
 
 
-def test_a_carve_without_its_publication_row_is_refused(cfg):
-    planned = Planned(StepKey(CARVE, "fake", "r1"), (), "1")
-    with pytest.raises(CrunchError, match="r1: a carve writes law_publications"):
-        runner.write_carved(cfg, Store(cfg), planned, {})
+def test_a_tabulate_without_its_publication_row_is_refused(cfg):
+    planned = Planned(StepKey(TABULATE, "fake", "r1"), (), "1")
+    with pytest.raises(CrunchError, match="r1: a tabulation writes law_publications"):
+        runner.write_tabulated(cfg, Store(cfg), planned, {})

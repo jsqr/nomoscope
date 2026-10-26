@@ -13,7 +13,7 @@ from nomoscope.crunch.routes import ANY, Route
 from nomoscope.derive import registry as datasets
 from nomoscope.graph import steps
 from nomoscope.graph.records import RecordRow
-from nomoscope.graph.steps import CARVE, CRUNCH, Planned, StepKey
+from nomoscope.graph.steps import CRUNCH, TABULATE, Planned, StepKey
 from nomoscope.graph.store import Store
 from nomoscope.partition import dataset_path
 from nomoscope.settings import Settings
@@ -30,12 +30,12 @@ LINES = "lines"
 
 @dataclass(frozen=True)
 class Staged:
-    """Loads each dump into a snapshot table, then carves every code from it."""
+    """Loads each dump into a snapshot table, then tabulates every code from it."""
 
     def plan(self, cfg: Settings, name: str, rows: Sequence[RecordRow]) -> list[Planned]:
         loads = runner.record_plan(name, rows, "1", stage=CRUNCH)
-        carves = [Planned(StepKey(CARVE, name, p.key.unit), (p.input,), "1") for p in loads]
-        return [*loads, *carves]
+        tabulations = [Planned(StepKey(TABULATE, name, p.key.unit), (p.input,), "1") for p in loads]
+        return [*loads, *tabulations]
 
     def run(
         self, cfg: Settings, store: Store, planned: Planned, rows: Mapping[str, RecordRow]
@@ -64,8 +64,8 @@ class Staged:
             schemas.LAW_SECTIONS: sections,
             schemas.LAW_PUBLICATIONS: schemas.publication(row, codes, stated),
         }
-        tables = runner.write_carved(cfg, store, planned, built)
-        return CrunchResult(planned.key.scope, CARVE, row.record, row.jurisdiction, tables)
+        tables = runner.write_tabulated(cfg, store, planned, built)
+        return CrunchResult(planned.key.scope, TABULATE, row.record, row.jurisdiction, tables)
 
 
 def text_date(cfg: Settings, row: RecordRow) -> str:
@@ -93,20 +93,20 @@ def read(cfg, dataset, j="us-ca"):
     return pl.read_parquet(dataset_path(cfg, dataset, j))
 
 
-def test_a_snapshot_step_runs_before_the_carve_and_one_record_carries_two_codes(cfg, tmp_path):
+def test_a_snapshot_step_runs_before_the_tabulate_and_one_record_carries_two_codes(cfg, tmp_path):
     first = dump(cfg, tmp_path, "a.txt", "2024-01-01\nGOV|1.|Text one.\nPEN|1.|Text two.\n")
     store = Store(cfg)
     results = runner.crunch(cfg, store, STATE_REGISTRY)
-    assert [(r.stage, r.unit) for r in results] == [("crunch", first.id), ("carve", first.id)]
+    assert [(r.stage, r.unit) for r in results] == [("crunch", first.id), ("tabulate", first.id)]
     dump(cfg, tmp_path, "b.txt", "2024-06-01\nGOV|1.|Text one.\n")
-    assert [r.stage for r in runner.crunch(cfg, store, STATE_REGISTRY)] == ["crunch", "carve"]
+    assert [r.stage for r in runner.crunch(cfg, store, STATE_REGISTRY)] == ["crunch", "tabulate"]
     derive(cfg, STATE_REGISTRY)
     versions = read(cfg, datasets.LAW_VERSIONS)
     assert sorted(versions["law_code"]) == ["GOV", "PEN"]
     # The second dump is a full publication of GOV only, so PEN is not absent.
     absent = dict(versions.select("law_code", "absent_from").iter_rows())
     assert absent == {"GOV": None, "PEN": None}
-    # A missing snapshot reruns only its own step. The carve's plan is unchanged.
+    # A missing snapshot reruns only its own step. The tabulate step's plan is unchanged.
     with store.open(read_only=True) as conn:
         [snapshot] = steps.tables(conn, StepKey(CRUNCH, "staged", first.id))
     (cfg.data_root / snapshot.path).unlink()
@@ -117,7 +117,7 @@ def test_a_snapshot_step_runs_before_the_carve_and_one_record_carries_two_codes(
 def test_a_route_change_reruns_only_what_it_moves(cfg, tmp_path, conventions):
     two = replace(
         fake.REGISTRY,
-        crunchers={"fake": fake.CRUNCHER, "other": runner.Carver(fake.carve, "1")},
+        crunchers={"fake": fake.CRUNCHER, "other": runner.Tabulator(fake.tabulate, "1")},
     )
     publish(cfg, tmp_path, P1, "a.txt")
     elgin = publish(cfg, tmp_path, P3, "b.txt", jurisdiction="us-il-elgin")

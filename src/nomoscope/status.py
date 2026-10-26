@@ -82,13 +82,13 @@ def status(cfg: Settings, known: Registry) -> Status:
         for p in plans:
             tables = {t.name: t for t in steps.tables(conn, p.planned.key)}
             versions = tables.get(registry.LAW_VERSIONS)
-            carves = build.carves(p.planned)
+            tabulations = build.tabulations(p.planned)
             jurisdictions.append(
                 JurisdictionStatus(
                     p.jurisdiction,
                     state[p.planned.key].value,
-                    tuple(sorted({i.scope for i in carves})),
-                    len(carves),
+                    tuple(sorted({i.scope for i in tabulations})),
+                    len(tabulations),
                     versions.rows if versions is not None else None,
                 )
             )

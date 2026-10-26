@@ -20,7 +20,7 @@ jurisdictions, project specs or results. Those belong in project repos.
 | `src/nomoscope/graph/` | The graph store: records, steps, and staleness |
 | `src/nomoscope/snarf/` | Sources, feeds, fetching, and local import |
 | `src/nomoscope/structure/` | Lines, bookmarks, grammars, the parser, and checks for printed codes |
-| `src/nomoscope/crunch/` | The registry, routing, the carved schemas, the runner, and the grammared cruncher |
+| `src/nomoscope/crunch/` | The registry, routing, the tabulated schemas, the runner, and the grammared cruncher |
 | `src/nomoscope/derive/` | The ledger, the datasets, conventions, parsers, segments, and the build step |
 | `src/nomoscope/catalog/` | The DuckDB catalog |
 | `src/nomoscope/cli/`, `status.py`, `show.py` | The command, built with `cli.app(registry, name)` |
@@ -37,13 +37,13 @@ by hash, with provenance. `sources/snarfed/` is append-only. snarf does
 not read file contents. Registration reads only `fetch.json`.
 
 **crunch** can do whatever a source needs. Its output must be
-reproducible from `sources/snarfed/`. Every cruncher writes the carved
-tables with `runner.write_carved`, which calls `conform`. Each carved
-record has a carve step keyed `(carve, <cruncher>, <record>)` and one
+reproducible from `sources/snarfed/`. Every cruncher writes the tabulated
+tables with `runner.write_tabulated`, which calls `conform`. Each tabulated
+record has a tabulate step keyed `(tabulate, <cruncher>, <record>)` and one
 `law_publications` row. The routing table chooses the cruncher.
 
 **derive** runs the same code for every jurisdiction, source, and
-cruncher. It reads only the carved tables and the config tables. Anything
+cruncher. It reads only the tabulated tables and the config tables. Anything
 specific to a source or code is data, not a branch in code. Drafting
 conventions are passed to the parsers as arguments. Dates stay in
 separate columns. `law_in_force` combines them.
@@ -54,7 +54,7 @@ root, and is rebuilt whole.
 ## What a project supplies
 
 - A `Registry` of `Source`s and crunchers, passed to `cli.app(registry,
-  name)`. A cruncher implements the `Cruncher` protocol, or is a `Carver`,
+  name)`. A cruncher implements the `Cruncher` protocol, or is a `Tabulator`,
   or a `GrammarCruncher` with a reader for its format and a directory of
   grammars.
 - In the same registry: the routes from records to crunchers, the segment
@@ -74,7 +74,7 @@ token count, and leaves the paid run to a person. Tests never call a model.
 Each step records its inputs, code version, and output tables. It reruns
 when it has no row, an input's fingerprint changed, its code version
 changed, or an output file is missing. Each stage module, `Source`, and
-`Carver` has a `VERSION` or `version`. Bump it when the same inputs give
+`Tabulator` has a `VERSION` or `version`. Bump it when the same inputs give
 different output. Grammars and conventions are inputs.
 
 Tests must never run a real snarf against a developer's data root. The

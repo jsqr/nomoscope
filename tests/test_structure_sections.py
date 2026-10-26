@@ -17,7 +17,7 @@ def test_split():
     assert sections.split("(Ord. 1) is cited.\nText.", RULES).history is None
 
 
-def test_carve():
+def test_tabulate():
     found = lines(
         ("Chapter 5", 280, C),
         ("FIRE", 280, C),
@@ -33,8 +33,8 @@ def test_carve():
         ("Fees are set.", 72),
     )
     g = GRAMMAR.model_copy(update={"sections": RULES})
-    carved = sections.carve(parse(found, g), found, g)
-    first, second = carved.sections
+    tabulated = sections.tabulate(parse(found, g), found, g)
+    first, second = tabulated.sections
     assert (first["section_num"], first["node_treepath"], first["heading"]) == (
         "5-1",
         "5/I",
@@ -47,12 +47,12 @@ def test_carve():
     assert (first["line_first"], first["line_last"]) == (5, 9)
     assert second["text"] == "Fees are set." and second["history"] is None
     assert [
-        (n["node_treepath"], n["parent_treepath"], n["contains_sections"]) for n in carved.nodes
+        (n["node_treepath"], n["parent_treepath"], n["contains_sections"]) for n in tabulated.nodes
     ] == [
         ("5", None, False),
         ("5/I", "5", True),
     ]
-    assert [n["level"] for n in carved.nodes] == ["chapter", "article"]
+    assert [n["level"] for n in tabulated.nodes] == ["chapter", "article"]
 
 
 def test_subdivision_spans_index_the_normalized_text():
@@ -69,7 +69,7 @@ def test_subdivision_spans_index_the_normalized_text():
         ("(Ord. 3, 2019)", 72),
     )
     g = GRAMMAR.model_copy(update={"sections": RULES})
-    [section] = sections.carve(parse(found, g), found, g).sections
+    [section] = sections.tabulate(parse(found, g), found, g).sections
     text = section["text"]
     assert text == (
         'The Town finds that\nA. "Permits" are due.\n(1) Fees.\n'
@@ -98,7 +98,7 @@ def test_a_dropped_subdivision_leaves_with_its_children():
         ("C. Kept too.", 72),
     )
     g = GRAMMAR.model_copy(update={"sections": rules})
-    [section] = sections.carve(parse(found, g), found, g).sections
+    [section] = sections.tabulate(parse(found, g), found, g).sections
     assert section["text"] == "A. Kept.\nC. Kept too."
     assert [s["path"] for s in section["subdivisions"]] == ["A", "C"]
 
@@ -110,7 +110,7 @@ def test_run_in_terms_are_subdivisions_by_slug():
         ("A. It has a roof.", 96),
         ("STREET — A road.", 72),
     )
-    [section] = sections.carve(parse(found, RUN_IN), found, RUN_IN).sections
+    [section] = sections.tabulate(parse(found, RUN_IN), found, RUN_IN).sections
     cut = {
         s["path"]: section["text"][s["start_char"] : s["end_char"]] for s in section["subdivisions"]
     }
@@ -135,22 +135,22 @@ DEFINITIONS = lines(
 )
 
 
-def test_an_undivided_chapter_is_carved_when_its_level_is_named():
+def test_an_undivided_chapter_is_tabulated_when_its_level_is_named():
     g = GRAMMAR.model_copy(update={"sections": gr.Sections(levels=["chapter"])})
-    carved = sections.carve(parse(DEFINITIONS, g), DEFINITIONS, g)
-    by_num = {s["section_num"]: s for s in carved.sections}
+    tabulated = sections.tabulate(parse(DEFINITIONS, g), DEFINITIONS, g)
+    by_num = {s["section_num"]: s for s in tabulated.sections}
     assert set(by_num) == {"5-1", "6"}
     six = by_num["6"]
     assert (six["heading"], six["node_treepath"]) == ("DEFINITIONS", None)
     assert six["text"].startswith("Words have these meanings.\nA. Building")
     assert [s["path"] for s in six["subdivisions"]] == ["A", "B"]
-    assert [n["node_treepath"] for n in carved.nodes] == ["5"]
+    assert [n["node_treepath"] for n in tabulated.nodes] == ["5"]
 
 
 def test_an_undivided_chapter_is_a_heading_and_a_finding_otherwise():
-    carved = sections.carve(parse(DEFINITIONS, GRAMMAR), DEFINITIONS, GRAMMAR)
-    assert {s["section_num"] for s in carved.sections} == {"5-1"}
-    assert [n["node_treepath"] for n in carved.nodes] == ["5", "6"]
+    tabulated = sections.tabulate(parse(DEFINITIONS, GRAMMAR), DEFINITIONS, GRAMMAR)
+    assert {s["section_num"] for s in tabulated.sections} == {"5-1"}
+    assert [n["node_treepath"] for n in tabulated.nodes] == ["5", "6"]
     found = checks.unsectioned(parse(DEFINITIONS, GRAMMAR), GRAMMAR)
     assert [(f["node_id"], f["detail"]) for f in found] == [
         ("6", "no section under it: 2 subdivisions, 26 characters of text")
@@ -194,7 +194,7 @@ def test_a_tail_note_shortens_the_last_subdivision():
         ("B. The clerk keeps it.  (Ord. 77-01 (part), 1977)", 72),
     )
     g = GRAMMAR.model_copy(update={"sections": TAIL})
-    [section] = sections.carve(parse(found, g), found, g).sections
+    [section] = sections.tabulate(parse(found, g), found, g).sections
     assert section["history"] == "(Ord. 77-01 (part), 1977)"
     b = next(s for s in section["subdivisions"] if s["path"] == "B")
     assert section["text"][b["start_char"] : b["end_char"]] == "B. The clerk keeps it."

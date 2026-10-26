@@ -225,7 +225,7 @@ def test_a_long_chapeau_keeps_its_enumerators_and_last_sentence():
     assert segment.cut(short, W20)[0].chapeau == ("(b) Short lead:",)
 
 
-def test_cut_follows_carved_subdivisions():
+def test_cut_follows_tabulated_subdivisions():
     text = "A. " + "alpha " * 8 + "\nB. " + "beta " * 8
     b = text.index("B.")
     rows = [
@@ -234,6 +234,6 @@ def test_cut_follows_carved_subdivisions():
         {"path": "B", "level": "subsection", "style": "upper_alpha", "number": "B",
          "start_char": b, "end_char": len(text)},
     ]  # fmt: skip
-    pieces = segment.cut(text, segment.Limit(10), None, subdivide.from_carved(rows))
+    pieces = segment.cut(text, segment.Limit(10), None, subdivide.from_tabulated(rows))
     assert [p.path for p in pieces] == [("A",), ("B",)]
     assert text[pieces[1].start : pieces[1].end].startswith("B. beta")

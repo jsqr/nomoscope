@@ -114,7 +114,7 @@ def test_a_rerun_is_a_no_op_and_a_new_publication_folds_onto_the_stored(cfg, tmp
     folded = {d: read(cfg, d) for d in registry.DATASETS}
     with Store(cfg).open(read_only=True) as conn:
         [inputs] = [steps.inputs_of(conn, StepKey(DERIVE, J, ""))]
-    assert [i.stage for i in inputs] == ["carve", "carve", "carve", "config"]
+    assert [i.stage for i in inputs] == ["tabulate", "tabulate", "tabulate", "config"]
     [again] = derive(cfg, force=True)
     assert again.mode == "refold"
     for dataset, frame in folded.items():

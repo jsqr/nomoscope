@@ -2,7 +2,7 @@
 -- is idempotent. Timestamps are UTC without a zone.
 --
 -- A step is keyed by (stage, scope, unit). The scope is the cruncher name
--- for crunch and carve steps, the jurisdiction for derive steps, and the
+-- for crunch and tabulate steps, the jurisdiction for derive steps, and the
 -- dataset for reference steps.
 
 CREATE TABLE IF NOT EXISTS records (
@@ -25,14 +25,14 @@ CREATE TABLE IF NOT EXISTS records (
 );
 
 CREATE TABLE IF NOT EXISTS steps (
-    stage             VARCHAR NOT NULL,    -- crunch | carve | derive | reference
+    stage             VARCHAR NOT NULL,    -- crunch | tabulate | derive | reference
     scope             VARCHAR NOT NULL,
     unit              VARCHAR NOT NULL,    -- a record id, or '' for a scope-wide step
     input_fingerprint VARCHAR NOT NULL,
     code_version      VARCHAR NOT NULL,
     fingerprint       VARCHAR NOT NULL,    -- sha256(input_fingerprint || '\n' || code_version)
     ran_at            TIMESTAMP NOT NULL,
-    details           VARCHAR,             -- json; derive reads a carve's admitted
+    details           VARCHAR,             -- json; derive reads a tabulation's admitted
     PRIMARY KEY (stage, scope, unit)
 );
 

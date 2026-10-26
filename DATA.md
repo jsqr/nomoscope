@@ -51,7 +51,7 @@ inputs of the steps that read them, so a change reruns those steps.
 | --- | --- | --- | --- |
 | snarf | `snarf fetch`, `snarf due`, `snarf import` | a source, or local files | `sources/snarfed/` |
 | crunch | `crunch` | `sources/snarfed/`, routes, grammars | `sources/crunched/<cruncher>/` |
-| derive | `derive` | carved tables, conventions, jurisdictions | `derived/`, the catalog |
+| derive | `derive` | tabulated tables, conventions, jurisdictions | `derived/`, the catalog |
 | query | `sql "<query>"` | `catalog.duckdb` | nothing |
 
 ## Snarfed
@@ -114,12 +114,12 @@ The registry's routes then assign each record a cruncher:
 
 ## Crunched
 
-A cruncher turns records into the carved tables. It may write its own
+A cruncher turns records into the tabulated tables. It may write its own
 snapshot tables first. Paths:
 
 ```
 sources/crunched/<cruncher>/<table>/publication=<unit>/data.parquet          snapshots
-sources/crunched/<cruncher>/carved/<table>/publication=<record>/data.parquet carved tables
+sources/crunched/<cruncher>/tabulated/<table>/publication=<record>/data.parquet tabulated tables
 ```
 
 ### Grammared crunchers
@@ -132,10 +132,10 @@ two steps:
   layout), `parse_nodes` (the tree, with the lines each node spans), and
   `parse_findings` (what the checks report). The grammar file is an input,
   so editing it reruns the parse.
-- `carve` writes the carved tables from the snapshots.
+- `tabulate` writes the tabulated tables from the snapshots.
 
 Sections are the grammar's deepest division level. `[sections] levels`
-names higher levels whose divisions are carved as sections when nothing
+names higher levels whose divisions are tabulated as sections when nothing
 divides them, such as a definitions chapter without sections; the
 `unsectioned` check reports numbered ones that are not.
 
@@ -149,14 +149,14 @@ subdivisions. Each acceptance adds files and replaces none, so the tables
 keep every acceptance; the latest one for a code is in force. The catalog
 has a view of each table.
 
-A carve is held, and derive does not read it, until three things are true.
+A tabulation is held, and derive does not read it, until three things are true.
 Someone has accepted a record of the code. No check has more findings than
 they accepted. And, if this is the record they accepted, every section
 still matches what they accepted. A change in nomoscope, in the grammar,
 or in an attached OCR record can change a section without adding a
 finding, and this comparison catches it. A later record of the same code,
 such as a new supplement, is judged on its findings alone. `grammar check`
-lists the sections that changed, and `status` counts held carves.
+lists the sections that changed, and `status` counts held tabulations.
 `grammar sample`
 prints a record's lines for drafting a grammar, and `grammar infer`
 drafts one with a chat model (billed; the `infer` extra). `grammar check`
@@ -166,7 +166,7 @@ link to the source file: each division and subdivision is badged with its
 level, its offset from the section level (section 0, chapter -1,
 subsection +1), and its pages, which link into a PDF source.
 
-### The carved tables
+### The tabulated tables
 
 | table | one row per |
 | --- | --- |
@@ -205,7 +205,7 @@ normalized text. The grammared cruncher does this.
 
 ## Derived
 
-Derive combines the carved tables of every publication of a jurisdiction,
+Derive combines the tabulated tables of every publication of a jurisdiction,
 from every source:
 
 ```
@@ -310,7 +310,7 @@ A version keeps each date in its own column:
 | `operative_date` | the history note |
 | `inoperative_date` | the history note: when the text expires |
 | `repeal_date` | the history note |
-| `statutory_default_date` | the carved column |
+| `statutory_default_date` | the tabulated column |
 | `first_seen`, `last_seen`, `absent_from` | the publications |
 
 The catalog's `law_in_force` gives each version's interval in force:
@@ -335,10 +335,10 @@ conventions rebuilds every jurisdiction.
 ### Subdivisions and segments
 
 `law_subdivisions` has one row per subdivision of a version, as a span
-into its text. A version whose carved section gives `subdivisions` uses
+into its text. A version whose tabulated section gives `subdivisions` uses
 them. Otherwise derive finds the parenthesized enumerators, such as (a),
 (1), (A), and (i), with the rules in `src/nomoscope/derive/subdivide.py`.
-`law_versions` keeps the carved list, so a fold onto stored datasets
+`law_versions` keeps the tabulated list, so a fold onto stored datasets
 keeps it too.
 
 `segments` cuts each version into spans for retrieval. A version within

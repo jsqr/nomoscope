@@ -1,1 +1,1 @@
-"""Derive: build the shared datasets from the carved tables."""
+"""Derive: build the shared datasets from the tabulated tables."""

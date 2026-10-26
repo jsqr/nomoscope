@@ -16,7 +16,7 @@ from nomoscope.crunch.registry import Registry
 from nomoscope.crunch.routes import ANY, Route
 from nomoscope.derive import build
 from nomoscope.graph import steps
-from nomoscope.graph.steps import CARVE
+from nomoscope.graph.steps import TABULATE
 from nomoscope.graph.store import Store
 from nomoscope.partition import dataset_path
 from nomoscope.settings import Settings
@@ -129,9 +129,9 @@ def crunch(cfg: Settings) -> list:
     return runner.crunch(cfg, Store(cfg), REGISTRY)
 
 
-def carve_details(cfg: Settings, record: archive.Record):
+def tabulate_details(cfg: Settings, record: archive.Record):
     with Store(cfg).open(read_only=True) as conn:
-        return steps.stored(conn, CARVE, NAME)[record.id].details
+        return steps.stored(conn, TABULATE, NAME)[record.id].details
 
 
 def derived(cfg: Settings) -> list[build.BuildResult]:
@@ -143,11 +143,11 @@ def test_a_record_without_a_grammar_names_the_path(cfg, record):
         crunch(cfg)
 
 
-def test_an_unaccepted_code_carves_but_derive_holds(cfg, record):
+def test_an_unaccepted_code_tabulates_but_derive_holds(cfg, record):
     write_grammar(cfg)
     results = crunch(cfg)
-    assert [(r.stage, r.unit) for r in results] == [("crunch", record.id), ("carve", record.id)]
-    details = carve_details(cfg, record)
+    assert [(r.stage, r.unit) for r in results] == [("crunch", record.id), ("tabulate", record.id)]
+    details = tabulate_details(cfg, record)
     assert details is not None
     assert details["admitted"] is False
     assert details["findings"] == {"sequence": 1}
@@ -161,9 +161,9 @@ def test_review_admits_and_derive_builds(cfg, record):
     write_grammar(cfg)
     crunch(cfg)
     accept(record)
-    # Accepting reruns the carve, not the parse.
-    assert [r.stage for r in crunch(cfg)] == ["carve"]
-    assert carve_details(cfg, record)["admitted"] is True
+    # Accepting reruns the tabulate step, not the parse.
+    assert [r.stage for r in crunch(cfg)] == ["tabulate"]
+    assert tabulate_details(cfg, record)["admitted"] is True
     [result] = derived(cfg)
     assert result.jurisdiction == JURISDICTION
     assert result.tables["law_versions"] == 2
@@ -185,7 +185,7 @@ def test_more_findings_than_accepted_hold(cfg, record):
     accept(record)
     amend(cfg, findings={})
     crunch(cfg)
-    details = carve_details(cfg, record)
+    details = tabulate_details(cfg, record)
     assert details["admitted"] is False
     assert details["worse"] == {"sequence": 1}
 
@@ -193,7 +193,7 @@ def test_more_findings_than_accepted_hold(cfg, record):
 def test_sections_carry_text_history_and_drop_notes(cfg, record):
     write_grammar(cfg)
     crunch(cfg)
-    path = Layout(NAME).carved_table(cfg, "law_sections", record.id)
+    path = Layout(NAME).tabulated_table(cfg, "law_sections", record.id)
     rows = pl.read_parquet(path).sort("section_num").to_dicts()
     assert [r["section_num"] for r in rows] == ["5-1", "5-3"]
     assert rows[0]["text"] == "The Town finds that fires happen.\nA. Permits are required."
@@ -222,7 +222,7 @@ def test_grammar_check_reports_without_writing(cfg, record):
     assert "sequence   5/5-3: gap: 5-1 -> 5-3" in out
     assert "derive:    held (not accepted; run grammar accept)" in out
     with Store(cfg).open(read_only=True) as conn:
-        assert steps.stored(conn, CARVE, NAME) == {}
+        assert steps.stored(conn, TABULATE, NAME) == {}
 
 
 def test_grammar_infer_dry_run_makes_no_request(cfg, record, monkeypatch):
@@ -282,7 +282,10 @@ def test_attaching_a_record_reruns_the_parse(cfg, record):
     crunch(cfg)
     assert crunch(cfg) == []
     attach.write(cfg, SOURCE, record, "ocr", {"00000-00001.json": b"{}"})
-    assert [(r.stage, r.unit) for r in crunch(cfg)] == [("crunch", record.id), ("carve", record.id)]
+    assert [(r.stage, r.unit) for r in crunch(cfg)] == [
+        ("crunch", record.id),
+        ("tabulate", record.id),
+    ]
 
 
 def test_a_changed_section_holds_the_accepted_record(cfg, record):
@@ -291,7 +294,7 @@ def test_a_changed_section_holds_the_accepted_record(cfg, record):
     # Without the history rule, 5-1's history note joins its text.
     write_grammar(cfg, gr.Sections(drop=RULES.drop))
     crunch(cfg)
-    details = carve_details(cfg, record)
+    details = tabulate_details(cfg, record)
     assert (details["admitted"], details["changed"]) == (False, 1)
     out = invoke("grammar", "check", fake.SOURCE_ID, record.id)
     assert "changed:   1 sections since review" in out
@@ -304,7 +307,7 @@ def test_another_record_of_the_code_is_judged_on_its_findings(cfg, record):
     amend(cfg, record="2020-01-01T000000Z-00000000")
     write_grammar(cfg, gr.Sections(drop=RULES.drop))
     crunch(cfg)
-    details = carve_details(cfg, record)
+    details = tabulate_details(cfg, record)
     assert (details["admitted"], details["changed"]) == (True, 0)
 
 

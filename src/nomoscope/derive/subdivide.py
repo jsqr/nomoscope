@@ -311,12 +311,12 @@ def closing(
 
 
 # The structure grammar's style names, as this module names them.
-CARVED_STYLES = {"arabic": DIGIT}
+TABULATED_STYLES = {"arabic": DIGIT}
 RUN_IN = "run_in"
 
 
-def from_carved(rows: Sequence[Mapping[str, Any]]) -> list[Division]:
-    """Divisions from a carved `subdivisions` list, in text order."""
+def from_tabulated(rows: Sequence[Mapping[str, Any]]) -> list[Division]:
+    """Divisions from a tabulated `subdivisions` list, in text order."""
     ordered = sorted(rows, key=lambda r: r["start_char"])
     index: dict[tuple[str, ...], int] = {}
     children: dict[int | None, int] = {}
@@ -328,7 +328,7 @@ def from_carved(rows: Sequence[Mapping[str, Any]]) -> list[Division]:
         children[parent] = children.get(parent, 0) + 1
         index[path] = i
         raw: str | None = r["style"]
-        style = RUN_IN if raw is None else CARVED_STYLES.get(raw, raw)
+        style = RUN_IN if raw is None else TABULATED_STYLES.get(raw, raw)
         out.append(
             Division(
                 path=path,

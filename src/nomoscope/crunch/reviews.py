@@ -5,7 +5,7 @@ Each acceptance writes one file to each of two tables under
 
 - `reviews`: who accepted which record of a code, when, the finding
   counts they accepted, the grammar's hash, and a note.
-- `reviewed_sections`: one row per carved section of that record: the
+- `reviewed_sections`: one row per tabulated section of that record: the
   division it is in, its number, heading, and history, and hashes of its
   text and of its subdivisions. A correction can change the subdivisions
   and not the text, so both are kept.
@@ -79,7 +79,7 @@ def table_glob(cfg: Settings, table: str) -> str | None:
 
 
 def summary(sections: list[Row]) -> pl.DataFrame:
-    """One row per carved section, as `reviewed_sections` keeps it, without the review id."""
+    """One row per tabulated section, as `reviewed_sections` keeps it, without the review id."""
     rows = [
         {
             "node_treepath": s["node_treepath"],

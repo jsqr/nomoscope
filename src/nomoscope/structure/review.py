@@ -2,8 +2,8 @@
 
 Every division is a heading with a badge: its level, its offset from the
 section level (section 0, chapter -1, subsection +1), and its pages.
-Sections show their carved text, with each subdivision marked, so the page
-shows what derive receives. Text that is not carved (a chapter's notes, a
+Sections show their tabulated text, with each subdivision marked, so the page
+shows what derive receives. Text that is not tabulated (a chapter's notes, a
 table of contents) is shown muted, and findings appear at the element they
 concern.
 """
@@ -103,8 +103,8 @@ def render(
     """The HTML page. `source` is the source file's href, for page links."""
     by_level = offsets(grammar)
     by_id = {n["id"]: n for n in nodes}
-    carved = sections.carve(nodes, lines, grammar)
-    by_section = {s["node_id"]: s for s in carved.sections}
+    tabulated = sections.tabulate(nodes, lines, grammar)
+    by_section = {s["node_id"]: s for s in tabulated.sections}
     docs = {d["node_id"]: d for d in documents.build(nodes, lines, grammar.sections.hyphens)[0]}
     found: dict[str | None, list[Row]] = {}
     for f in findings:
@@ -136,7 +136,7 @@ def render(
             label = " ".join(p for p in (n["label"], n["heading"]) if p)
             mark = badge(n, by_level, source)
             if n["id"] in by_section and by_level.get(n["level"]) != 0:
-                mark += '<span class="badge b-section">carved as section</span>'
+                mark += '<span class="badge b-section">tabulated as section</span>'
             out.append(f'<div class="division">{mark}{html.escape(label)}</div>')
         for f in found.get(n["id"], []):
             out.append(f'<div class="finding">{said(f)}</div>')
@@ -160,7 +160,7 @@ def render(
             for para in section["dropped"]:
                 out.append(f'<div class="dropped">{html.escape(para)}</div>')
         elif doc is not None and doc["text"]:
-            out.append(f'<div class="muted">not carved: {html.escape(doc["text"])}</div>')
+            out.append(f'<div class="muted">not tabulated: {html.escape(doc["text"])}</div>')
         if doc is not None and doc["notes"]:
             notes = "\n".join(doc["notes"])
             muted = f"<div class='muted'>{html.escape(notes)}</div>"

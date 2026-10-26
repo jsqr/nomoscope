@@ -1,10 +1,10 @@
-"""Build each jurisdiction's derived datasets from its carved publications.
+"""Build each jurisdiction's derived datasets from its tabulated publications.
 
-There is one derive step per jurisdiction. Its inputs are the carve steps
+There is one derive step per jurisdiction. Its inputs are the tabulate steps
 of the jurisdiction's records, from every source, and the drafting
-conventions. A record's carve step is the one of the cruncher it routes
-to now. A carve that records `admitted: false` in its details is held:
-it is not an input until a later carve of the record admits it.
+conventions. A record's tabulate step is the one of the cruncher it routes
+to now. A tabulation that records `admitted: false` in its details is held:
+it is not an input until a later tabulate of the record admits it.
 
 If the only change is new publications, they are folded onto the stored
 datasets, and subdivisions and segments of unchanged versions are kept.
@@ -21,15 +21,15 @@ import duckdb
 import polars as pl
 
 from nomoscope.crunch import routes as routing
-from nomoscope.crunch import schemas as carved_schemas
+from nomoscope.crunch import schemas as tabulated_schemas
 from nomoscope.crunch.registry import Registry
 from nomoscope.crunch.routes import Routes
 from nomoscope.derive import conventions as drafting
 from nomoscope.derive import datasets, registry, segment
 from nomoscope.derive.conventions import Conventions
-from nomoscope.derive.datasets import Carved, Reuse
+from nomoscope.derive.datasets import Reuse, Tabulated
 from nomoscope.graph import fingerprint, records, steps
-from nomoscope.graph.steps import CARVE, CONFIG, DERIVE, Input, Planned, Staleness, StepKey
+from nomoscope.graph.steps import CONFIG, DERIVE, TABULATE, Input, Planned, Staleness, StepKey
 from nomoscope.graph.store import Store
 from nomoscope.parquet import write_parquet
 from nomoscope.partition import dataset_path
@@ -37,7 +37,7 @@ from nomoscope.settings import Settings
 
 log = logging.getLogger(__name__)
 
-# Bump when the same carved tables give different datasets.
+# Bump when the same tabulated tables give different datasets.
 VERSION = "3"
 FOLD = "fold"
 REFOLD = "refold"
@@ -79,16 +79,16 @@ def plan(
     settings: segment.Settings = segment.DEFAULT,
 ) -> list[JurisdictionStep]:
     version = code_version(settings)
-    carves: dict[str, dict[str, steps.Stored]] = {}
+    tabulations: dict[str, dict[str, steps.Stored]] = {}
     by_jurisdiction: dict[str, list[Input]] = defaultdict(list)
     rows = records.records(conn, crunchable=True)
     for name, routed in routing.routed(routes, rows).items():
-        stored = carves.setdefault(name, steps.stored(conn, CARVE, name))
+        stored = tabulations.setdefault(name, steps.stored(conn, TABULATE, name))
         for row in routed:
-            carve = stored.get(row.record)
-            if carve is not None and steps.admitted(carve):
+            tabulate = stored.get(row.record)
+            if tabulate is not None and steps.admitted(tabulate):
                 by_jurisdiction[row.jurisdiction].append(
-                    Input(CARVE, name, row.record, carve.fingerprint)
+                    Input(TABULATE, name, row.record, tabulate.fingerprint)
                 )
     config = conventions_input(found)
     plans = []
@@ -99,8 +99,8 @@ def plan(
     return plans
 
 
-def carves(planned: Planned) -> list[Input]:
-    return [i for i in planned.inputs if i.stage == CARVE]
+def tabulations(planned: Planned) -> list[Input]:
+    return [i for i in planned.inputs if i.stage == TABULATE]
 
 
 def added(planned: Planned, state: Staleness, previous: Sequence[Input]) -> list[Input] | None:
@@ -115,7 +115,7 @@ def added(planned: Planned, state: Staleness, previous: Sequence[Input]) -> list
     if any(now.get((i.stage, i.scope, i.unit)) != i.fingerprint for i in previous):
         return None
     folded = {(i.stage, i.scope, i.unit) for i in previous}
-    new = [i for i in carves(planned) if (i.stage, i.scope, i.unit) not in folded]
+    new = [i for i in tabulations(planned) if (i.stage, i.scope, i.unit) not in folded]
     return new or None
 
 
@@ -143,10 +143,10 @@ def build(
         state = steps.classify(cfg, conn, [p.planned for p in plans])
         previous = {p.planned.key: steps.inputs_of(conn, p.planned.key) for p in plans}
         sources = {(r.record, r.source) for r in records.records(conn, crunchable=True)}
-        carved = {
-            (i.scope, i.unit): steps.tables(conn, StepKey(CARVE, i.scope, i.unit))
+        tabulated = {
+            (i.scope, i.unit): steps.tables(conn, StepKey(TABULATE, i.scope, i.unit))
             for p in plans
-            for i in carves(p.planned)
+            for i in tabulations(p.planned)
         }
     source_of = dict(sources)
     results = []
@@ -155,7 +155,7 @@ def build(
         if st is Staleness.FRESH and not force:
             continue
         new = None if force else added(p.planned, st, previous[p.planned.key])
-        results.append(build_one(cfg, store, p, new, carved, source_of, settings, found))
+        results.append(build_one(cfg, store, p, new, tabulated, source_of, settings, found))
     return results
 
 
@@ -164,7 +164,7 @@ def build_one(
     store: Store,
     step: JurisdictionStep,
     new: list[Input] | None,
-    carved: Mapping[tuple[str, str], list[steps.TableRow]],
+    tabulated: Mapping[tuple[str, str], list[steps.TableRow]],
     source_of: Mapping[str, str],
     settings: segment.Settings,
     found: Conventions,
@@ -176,8 +176,10 @@ def build_one(
         onto = datasets.stored_ledgers(stored)
         reuse = Reuse(stored.get(registry.LAW_SUBDIVISIONS), stored.get(registry.SEGMENTS))
     else:
-        mode, todo, onto, reuse = REFOLD, carves(step.planned), None, Reuse()
-    publications = [load_carved(cfg, source_of[i.unit], carved[i.scope, i.unit]) for i in todo]
+        mode, todo, onto, reuse = REFOLD, tabulations(step.planned), None, Reuse()
+    publications = [
+        load_tabulated(cfg, source_of[i.unit], tabulated[i.scope, i.unit]) for i in todo
+    ]
     ledgers = datasets.folded(publications, j, onto)
     built = datasets.datasets(ledgers, j, settings, reuse, found)
     rows = write_tables(cfg, built, j)
@@ -187,14 +189,14 @@ def build_one(
     return BuildResult(j, mode, len(todo), {k: v.height for k, v in built.items()})
 
 
-def load_carved(cfg: Settings, source: str, tables: Iterable[steps.TableRow]) -> Carved:
+def load_tabulated(cfg: Settings, source: str, tables: Iterable[steps.TableRow]) -> Tabulated:
     frames = {t.name: pl.read_parquet(cfg.data_root / t.path) for t in tables}
-    return Carved(
+    return Tabulated(
         source=source,
-        publication=frames[carved_schemas.LAW_PUBLICATIONS],
-        sections=frames.get(carved_schemas.LAW_SECTIONS),
-        nodes=frames.get(carved_schemas.LAW_NODES),
-        sessions=frames.get(carved_schemas.SESSIONS),
+        publication=frames[tabulated_schemas.LAW_PUBLICATIONS],
+        sections=frames.get(tabulated_schemas.LAW_SECTIONS),
+        nodes=frames.get(tabulated_schemas.LAW_NODES),
+        sessions=frames.get(tabulated_schemas.SESSIONS),
     )
 
 

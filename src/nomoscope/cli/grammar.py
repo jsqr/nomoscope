@@ -108,9 +108,9 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         except (NomoscopeError, ValueError) as e:
             raise fail(str(e)) from e
         nodes, findings = grammared.parsed(g, doc)
-        carved = sections.carve(nodes, doc.lines, g).sections
+        tabulated = sections.tabulate(nodes, doc.lines, g).sections
         review_row, accepted = grammared.in_force(cfg, row)
-        changes = grammared.since_review(review_row, accepted, record, carved)
+        changes = grammared.since_review(review_row, accepted, record, tabulated)
         a = grammared.admission(review_row, checks.counts(findings), changes)
         target = out or cfg.data_root / REVIEW / source / record
         target.mkdir(parents=True, exist_ok=True)

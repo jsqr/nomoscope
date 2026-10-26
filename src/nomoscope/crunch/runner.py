@@ -22,7 +22,7 @@ from nomoscope.crunch.routes import Routes
 from nomoscope.graph import records as graph_records
 from nomoscope.graph import steps
 from nomoscope.graph.records import RecordRow, Registration
-from nomoscope.graph.steps import CARVE, CRUNCH, Input, Planned, Staleness, StepKey, TableRow
+from nomoscope.graph.steps import CRUNCH, TABULATE, Input, Planned, Staleness, StepKey, TableRow
 from nomoscope.graph.store import Store
 from nomoscope.parquet import write_parquet
 from nomoscope.settings import Settings
@@ -135,7 +135,7 @@ def pending(
 ) -> dict[str, dict[str, int]]:
     """Count each cruncher's steps by state, from the store alone.
 
-    "held" counts the carves that derive does not read (`steps.admitted`).
+    "held" counts the tabulations that derive does not read (`steps.admitted`).
     """
     found = plans(cfg, conn, registry, routes)
     state = steps.classify(cfg, conn, [p for r in found for p in r.planned], check_outputs=False)
@@ -144,7 +144,9 @@ def pending(
         tally = counts.setdefault(r.name, {})
         for p in r.planned:
             tally[state[p.key].value] = tally.get(state[p.key].value, 0) + 1
-        held = sum(1 for s in steps.stored(conn, CARVE, r.name).values() if not steps.admitted(s))
+        held = sum(
+            1 for s in steps.stored(conn, TABULATE, r.name).values() if not steps.admitted(s)
+        )
         if held:
             tally["held"] = held
     return counts
@@ -196,7 +198,7 @@ def write_snapshot(
     return write_tables(cfg, store, lay, unit, planned, built, lay.snapshot_table, details)
 
 
-def write_carved(
+def write_tabulated(
     cfg: Settings,
     store: Store,
     planned: Planned,
@@ -204,38 +206,38 @@ def write_carved(
     zone: str = "UTC",
     details: Mapping[str, object] | None = None,
 ) -> dict[str, TableResult]:
-    """Conform the carved tables, write them, and record the carve step.
+    """Conform the tabulated tables, write them, and record the tabulate step.
 
     law_publications is required, since derive dates every row by it.
     """
     unit = planned.key.unit
-    if planned.key.stage != CARVE:
-        raise schemas.CrunchError(f"{unit}: carved tables are written by a carve step")
+    if planned.key.stage != TABULATE:
+        raise schemas.CrunchError(f"{unit}: tabulated tables are written by a tabulate step")
     if schemas.LAW_PUBLICATIONS not in built:
-        raise schemas.CrunchError(f"{unit}: a carve writes {schemas.LAW_PUBLICATIONS}")
+        raise schemas.CrunchError(f"{unit}: a tabulation writes {schemas.LAW_PUBLICATIONS}")
     conformed = {name: schemas.conform(name, frame, zone) for name, frame in built.items()}
     lay = Layout(planned.key.scope)
-    return write_tables(cfg, store, lay, unit, planned, conformed, lay.carved_table, details)
+    return write_tables(cfg, store, lay, unit, planned, conformed, lay.tabulated_table, details)
 
 
-Carve = Callable[[Settings, RecordRow, archive.Record], Mapping[str, pl.DataFrame]]
+Tabulate = Callable[[Settings, RecordRow, archive.Record], Mapping[str, pl.DataFrame]]
 
 
 @dataclass(frozen=True)
-class Carver:
-    """A cruncher with one carve step per record.
+class Tabulator:
+    """A cruncher with one tabulate step per record.
 
-    carve returns a record's carved tables. Bump version when carve output
+    tabulate returns a record's tabulated tables. Bump version when tabulate output
     changes for the same record.
     """
 
-    carve: Carve
+    tabulate: Tabulate
     version: str
     zone: str = "UTC"
 
     def plan(self, cfg: Settings, name: str, rows: Sequence[RecordRow]) -> list[Planned]:
-        version = schemas.carve_version(self.version, self.zone)
-        return record_plan(name, rows, version, stage=CARVE)
+        version = schemas.tabulate_version(self.version, self.zone)
+        return record_plan(name, rows, version, stage=TABULATE)
 
     def run(
         self,
@@ -246,5 +248,5 @@ class Carver:
     ) -> CrunchResult:
         row = rows[planned.key.unit]
         record = archive.find(cfg.snarfed, row.source, row.record)
-        tables = write_carved(cfg, store, planned, self.carve(cfg, row, record), self.zone)
-        return CrunchResult(planned.key.scope, CARVE, row.record, row.jurisdiction, tables)
+        tables = write_tabulated(cfg, store, planned, self.tabulate(cfg, row, record), self.zone)
+        return CrunchResult(planned.key.scope, TABULATE, row.record, row.jurisdiction, tables)

@@ -64,8 +64,8 @@ def test_page_links_when_the_source_has_pages():
     assert 'href="code.pdf#page=1"' in page("code.pdf")
 
 
-def test_a_chapter_carved_as_a_section_is_marked():
+def test_a_chapter_tabulated_as_a_section_is_marked():
     g = GRAMMAR.model_copy(update={"sections": gr.Sections(levels=["chapter"])})
     found = lines(("Chapter 6", 280, C), ("DEFINITIONS", 280, C), ("A. Building means a roof.", 72))
     html = review.render(parse(found, g), found, g, [], [("record", "r1")])
-    assert 'chapter -2 p1</span><span class="badge b-section">carved as section</span>' in html
+    assert 'chapter -2 p1</span><span class="badge b-section">tabulated as section</span>' in html

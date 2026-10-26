@@ -21,7 +21,7 @@ import polars as pl
 from nomoscope.crunch import schemas
 from nomoscope.crunch.registry import Registry
 from nomoscope.crunch.routes import ANY, Route
-from nomoscope.crunch.runner import Carver
+from nomoscope.crunch.runner import Tabulator
 from nomoscope.graph.records import RecordRow
 from nomoscope.settings import Settings
 from nomoscope.snarf import archive
@@ -35,7 +35,7 @@ CODE = Feed("code", ("",), "none", days=(), completeness="full")
 SOURCE = Source(SOURCE_ID, (CODE,), (), lambda d: {})
 
 
-def carve(cfg: Settings, row: RecordRow, record: archive.Record) -> Mapping[str, pl.DataFrame]:
+def tabulate(cfg: Settings, row: RecordRow, record: archive.Record) -> Mapping[str, pl.DataFrame]:
     [item] = record.items()
     text = blob_store(cfg).read(item.sha256).decode("utf-8")
     stated, nodes, sections = parse(text)
@@ -101,7 +101,7 @@ def carve(cfg: Settings, row: RecordRow, record: archive.Record) -> Mapping[str,
     }
 
 
-CRUNCHER = Carver(carve, "1")
+CRUNCHER = Tabulator(tabulate, "1")
 REGISTRY = Registry(
     sources={SOURCE_ID: SOURCE},
     crunchers={SOURCE_ID: CRUNCHER},

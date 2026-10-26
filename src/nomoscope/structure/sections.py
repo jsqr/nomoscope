@@ -19,7 +19,7 @@ from nomoscope.text import normalize
 
 
 @dataclass(frozen=True)
-class Carved:
+class Tabulated:
     sections: list[Row]
     nodes: list[Row]
 
@@ -30,7 +30,7 @@ def section_level(grammar: gr.Grammar) -> str | None:
 
 
 def is_section(node: Row, grammar: gr.Grammar, divided: set[str]) -> bool:
-    """Whether a node is carved as a section.
+    """Whether a node is tabulated as a section.
 
     `divided` holds the ids of the nodes with a division under them.
     """
@@ -132,7 +132,7 @@ def spans(doc: str, parts: Split, subs: list[Row], by_id: dict[str, Row]) -> lis
     return out
 
 
-def carve(nodes: list[Row], lines: list[Row], grammar: gr.Grammar) -> Carved:
+def tabulate(nodes: list[Row], lines: list[Row], grammar: gr.Grammar) -> Tabulated:
     divided = {n["parent_id"] for n in nodes if n["kind"] == "division"}
     docs, subs, back = documents.build(nodes, lines, grammar.sections.hyphens)
     by_doc = {d["node_id"]: d for d in docs}
@@ -186,4 +186,4 @@ def carve(nodes: list[Row], lines: list[Row], grammar: gr.Grammar) -> Carved:
         }
         for i, n in enumerate(heads)
     ]
-    return Carved(sections, heads_out)
+    return Tabulated(sections, heads_out)

@@ -1,4 +1,4 @@
-"""Crunch: turn archived records into the carved tables."""
+"""Crunch: turn archived records into the tabulated tables."""
 
 from typing import Protocol
 

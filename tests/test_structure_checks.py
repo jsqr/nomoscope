@@ -184,7 +184,7 @@ def test_scheme_reports_sections_off_the_usual_order():
     assert checks.scheme(rows, PARSE_GRAMMAR) == []
 
 
-def test_lists_outside_carved_sections_are_not_checked():
+def test_lists_outside_tabulated_sections_are_not_checked():
     marks = [
         {"ordinal": 0, "depth": 0, "title": "Preface", "page": 0, "top": 60.0},
         {"ordinal": 1, "depth": 0, "title": "chapter 5: Fire", "page": 0, "top": 100.0},

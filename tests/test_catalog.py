@@ -123,7 +123,7 @@ def test_status_and_graph_show_report_the_steps(three):
     assert "fake" in out and f"{J}" in out and "fresh" in out
     shown = invoke("graph", "show")
     assert f"fresh    derive/{J}  (4 inputs)" in shown
-    assert "fresh    carve/fake/" in shown
+    assert "fresh    tabulate/fake/" in shown
     assert "fresh    reference/jurisdictions" in shown
 
 

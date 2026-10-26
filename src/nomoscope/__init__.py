@@ -8,14 +8,14 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from nomoscope.crunch.registry import Registry
-    from nomoscope.crunch.runner import Carver
+    from nomoscope.crunch.runner import Tabulator
 
-__all__ = ["Carver", "Registry"]
+__all__ = ["Registry", "Tabulator"]
 
 # Loaded on first use, so importing one module does not import every stage.
 LAZY = {
     "Registry": ("nomoscope.crunch.registry", "Registry"),
-    "Carver": ("nomoscope.crunch.runner", "Carver"),
+    "Tabulator": ("nomoscope.crunch.runner", "Tabulator"),
 }
 
 
