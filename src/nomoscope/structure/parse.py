@@ -76,6 +76,14 @@ def agrees(m: gr.Match, stack: list[_Open]) -> bool:
     )
 
 
+def corrected(corrections: list[gr.Correction], line: Row, text: str) -> str:
+    """`text` as the parse reads it: with a correction of its line applied, if any."""
+    for c in corrections:
+        if line["page"] + 1 == c.page and text.startswith(c.printed):
+            return c.reads + text[len(c.printed) :]
+    return text
+
+
 def running(skip: gr.Skip, line: Row) -> bool:
     if line.get("block_type") in skip.block_types:
         return True
@@ -376,10 +384,11 @@ def parse(lines: list[Row], grammar: gr.Grammar, marks: list[Row] | None = None)
             _own(top, index, text, text)
             continue
 
+        read = corrected(grammar.corrections, line, text)
         found = [
             hit
             for m in ms
-            if (hit := gr.match(m, text)) is not None
+            if (hit := gr.match(m, read)) is not None
             and holds(m.level.signals, line)
             and agrees(hit, stack)
         ]
@@ -457,7 +466,27 @@ def parse(lines: list[Row], grammar: gr.Grammar, marks: list[Row] | None = None)
     _close(rows, lines)
     for row in rows:
         row["heading"] = row["heading"].replace("\n", " ") if row["heading"] else None
+    if grammar.sections.level_names == "depth":
+        by_depth(rows, grammar)
     return rows
+
+
+def by_depth(rows: list[Row], grammar: gr.Grammar) -> None:
+    """Name each subdivision by its depth below its division.
+
+    Run-in terms keep their level and do not count. A subdivision deeper
+    than the grammar's levels is named "level <n>".
+    """
+    names = [lv.name for lv in grammar.levels if lv.kind == "subdivision"]
+    by_id = {r["id"]: r for r in rows}
+    for r in rows:
+        if r["kind"] != "subdivision" or r["level"] == RUN_IN:
+            continue
+        depth, up = 1, by_id[r["parent_id"]]
+        while up["kind"] == "subdivision":
+            depth += up["level"] != RUN_IN
+            up = by_id[up["parent_id"]]
+        r["level"] = names[depth - 1] if depth <= len(names) else f"level {depth}"
 
 
 def scope(node: Row, by_id: dict[str, Row]) -> str | None:

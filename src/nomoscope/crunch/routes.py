@@ -1,7 +1,7 @@
 """Route registered records to crunchers.
 
-The routes come from crunchers.csv in the config root. A route names a
-source, a jurisdiction, a code, and a cruncher. "*" matches any value. A
+The routes are values in the project's registry. A route names a source,
+a jurisdiction, a code, and a cruncher. "*" matches any value. A
 record that carries every code has an empty code, which only "*" matches.
 valid_from, if set, is the first record date the route applies to. A
 record's date is its last-modified time, else its fetch time.
@@ -15,23 +15,10 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date
 
-import polars as pl
-
 from nomoscope.crunch import CrunchError
 from nomoscope.graph.records import RecordRow
-from nomoscope.settings import Settings
 
-FILE = "crunchers.csv"
 ANY = "*"
-SCHEMA = pl.Schema(
-    {
-        "source": pl.String,
-        "jurisdiction": pl.String,
-        "law_code": pl.String,
-        "cruncher": pl.String,
-        "valid_from": pl.Date,
-    }
-)
 
 
 class RouteError(CrunchError):
@@ -61,25 +48,6 @@ class Route:
 
 
 Routes = tuple[Route, ...]
-
-
-def parse(data: bytes, name: str = FILE) -> Routes:
-    try:
-        frame = pl.read_csv(data, schema=SCHEMA)
-    except pl.exceptions.PolarsError as e:
-        raise RouteError(f"{name}: {e}") from e
-    for column in ("source", "jurisdiction", "law_code", "cruncher"):
-        if frame[column].null_count():
-            raise RouteError(f"{name}: every row names a {column}, or {ANY!r}")
-    return tuple(Route(**r) for r in frame.to_dicts())
-
-
-def load(cfg: Settings) -> Routes:
-    """The project's routes. Empty without a config root or crunchers.csv."""
-    if cfg.config_root is None:
-        return ()
-    path = cfg.config_root / FILE
-    return parse(path.read_bytes(), str(path)) if path.is_file() else ()
 
 
 def route(routes: Iterable[Route], row: RecordRow) -> str | None:

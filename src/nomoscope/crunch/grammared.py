@@ -4,11 +4,13 @@ Each record has two steps. Parse reads the record, parses it, runs the
 checks, and writes the snapshot tables `parse_lines`, `parse_nodes`,
 and `parse_findings`. The grammar file is one of its inputs. Carve
 writes the carved tables and records whether derive may read them
-(`steps.admitted`): only once the grammar is reviewed and no check has
-more findings than the review accepted.
+(`steps.admitted`): only once a person has accepted a record of the code
+(`reviews`), no check has more findings than they accepted, and, for the
+record they accepted, no section has changed since. Other records of the
+code are judged on their findings.
 
-A grammar is at `grammars/<source>/<jurisdiction>/<code>.toml` in the
-config root.
+A grammar is at `<source>/<jurisdiction>/<code>.toml` in the cruncher's
+grammars directory, which the project gives when it creates the cruncher.
 """
 
 from collections import Counter
@@ -19,7 +21,7 @@ from pathlib import Path
 import polars as pl
 
 from nomoscope import structure
-from nomoscope.crunch import CrunchError, runner, schemas
+from nomoscope.crunch import CrunchError, reviews, runner, schemas
 from nomoscope.crunch import routes as routing
 from nomoscope.crunch.layout import Layout
 from nomoscope.crunch.registry import Registry
@@ -27,11 +29,11 @@ from nomoscope.crunch.results import CrunchResult
 from nomoscope.crunch.runner import record_plan, write_carved, write_snapshot
 from nomoscope.graph import fingerprint
 from nomoscope.graph import records as graph_records
-from nomoscope.graph.records import RecordRow
+from nomoscope.graph.records import RECORD, RecordRow
 from nomoscope.graph.steps import CARVE, CONFIG, CRUNCH, Input, Planned, StepKey
 from nomoscope.graph.store import Store
 from nomoscope.settings import Settings
-from nomoscope.snarf import archive
+from nomoscope.snarf import archive, attach
 from nomoscope.structure import Row, checks, parse, sections
 from nomoscope.structure import grammar as gr
 from nomoscope.structure import lines as linelib
@@ -95,23 +97,51 @@ Reader = Callable[[Settings, archive.Record], Document]
 StatedOf = Callable[[Settings, RecordRow, archive.Record], schemas.Stated]
 
 
-def grammar_path(cfg: Settings, row: RecordRow) -> Path | None:
-    if cfg.config_root is None:
+def grammar_path(grammars: Path | None, row: RecordRow) -> Path | None:
+    if grammars is None:
         return None
-    return cfg.config_root / GRAMMARS / row.source / row.jurisdiction / f"{row.code}.toml"
+    return grammars / row.source / row.jurisdiction / f"{row.code}.toml"
 
 
-def grammar_input(cfg: Settings, row: RecordRow) -> Input:
-    path = grammar_path(cfg, row)
+def grammar_input(grammars: Path | None, row: RecordRow) -> Input:
+    path = grammar_path(grammars, row)
     unit = f"{row.source}/{row.jurisdiction}/{row.code}"
     found = fingerprint.file_sha256(path) if path is not None and path.is_file() else MISSING
     return Input(CONFIG, GRAMMARS, unit, found)
 
 
-def load_grammar(cfg: Settings, row: RecordRow) -> gr.Grammar:
-    path = grammar_path(cfg, row)
+def review_input(cfg: Settings, row: RecordRow) -> Input:
+    """The code's review in force, as an input of the carve step."""
+    found = reviews.latest(cfg, row.source, row.jurisdiction, row.code)
+    unit = f"{row.source}/{row.jurisdiction}/{row.code}"
+    # Like a config file, a review is outside the store, which keeps no hash of it.
+    return Input(CONFIG, reviews.REVIEWS, unit, found.review_id if found else MISSING)
+
+
+def in_force(cfg: Settings, row: RecordRow) -> tuple[reviews.Review | None, pl.DataFrame | None]:
+    """The code's review in force and the sections it accepted, if it has one."""
+    found = reviews.latest(cfg, row.source, row.jurisdiction, row.code)
+    return found, reviews.accepted_sections(cfg, found) if found else None
+
+
+def since_review(
+    review: reviews.Review | None, accepted: pl.DataFrame | None, record: str, carved: list[Row]
+) -> list[Row] | None:
+    """Sections changed since the review; none for a record other than the reviewed one.
+
+    None when the code has no review.
+    """
+    if review is None or accepted is None:
+        return None
+    if record != review.record:
+        return []
+    return reviews.changes(accepted, reviews.summary(carved))
+
+
+def load_grammar(grammars: Path | None, row: RecordRow) -> gr.Grammar:
+    path = grammar_path(grammars, row)
     if path is None or not path.is_file():
-        where = path or f"<config_root>/{GRAMMARS}/{row.source}/{row.jurisdiction}/{row.code}.toml"
+        where = path or f"<grammars>/{row.source}/{row.jurisdiction}/{row.code}.toml"
         raise CrunchError(
             f"{row.record}: no grammar at {where}; draft one from `grammar sample "
             f"{row.source} {row.record}`"
@@ -141,14 +171,32 @@ def parsed(grammar: gr.Grammar, doc: Document) -> tuple[list[Row], list[Row]]:
     return nodes, found
 
 
-def admission(grammar: gr.Grammar, counts: Mapping[str, int]) -> dict[str, object]:
-    worse = checks.worse(dict(counts), grammar.review.findings)
+def admission(
+    review: reviews.Review | None, counts: Mapping[str, int], changes: list[Row] | None
+) -> dict[str, object]:
+    """Whether derive may read a carve."""
+    worse = checks.worse(dict(counts), review.findings) if review else {}
     return {
-        "admitted": grammar.review.reviewed and not worse,
-        "review": grammar.review.status,
+        "admitted": review is not None and not worse and not changes,
+        "review": review.review_id if review else None,
         "findings": dict(counts),
         "worse": worse,
+        "changed": len(changes or []),
     }
+
+
+def held(a: Mapping[str, object]) -> str:
+    """Why derive leaves a carve out, or "admitted"."""
+    if a["admitted"]:
+        return "admitted"
+    reasons = []
+    if a["review"] is None:
+        reasons.append("not accepted; run grammar accept")
+    if a["worse"]:
+        reasons.append(f"worse {a['worse']}")
+    if a["changed"]:
+        reasons.append(f"{a['changed']} sections changed since review")
+    return f"held ({'; '.join(reasons)})"
 
 
 @dataclass(frozen=True)
@@ -160,17 +208,24 @@ class Checked:
     findings: list[Row]
     admission: dict[str, object]
     outline: pl.DataFrame | None
+    changes: list[Row] | None
 
 
-def check(grammar: gr.Grammar, doc: Document) -> Checked:
+def check(
+    grammar: gr.Grammar,
+    doc: Document,
+    review: reviews.Review | None,
+    accepted: pl.DataFrame | None,
+    record: str,
+) -> Checked:
     nodes, found = parsed(grammar, doc)
     levels = Counter(n["level"] for n in nodes if n["kind"] != "root")
     carved = sections.carve(nodes, doc.lines, grammar)
     marks = pl.DataFrame(doc.marks)
     outline = checks.outline_summary(nodes, marks, grammar) if doc.marks else None
-    return Checked(
-        dict(levels), carved.sections, found, admission(grammar, checks.counts(found)), outline
-    )
+    changes = since_review(review, accepted, record, carved.sections)
+    a = admission(review, checks.counts(found), changes)
+    return Checked(dict(levels), carved.sections, found, a, outline, changes)
 
 
 @dataclass(frozen=True)
@@ -179,6 +234,7 @@ class GrammarCruncher:
 
     read: Reader
     version: str
+    grammars: Path | None = None
     stated: StatedOf = nothing_stated
     zone: str = "UTC"
 
@@ -186,10 +242,21 @@ class GrammarCruncher:
         version = f"{self.version}-{structure.VERSION}"
         parse_version = fingerprint.code_version(f"{version}-parse", *SNAPSHOTS.values())
         carve_version = schemas.carve_version(version, self.zone)
+        attached = {source: attach.index(cfg, source) for source in {r.source for r in rows}}
+
+        def inputs(r: RecordRow) -> tuple[Input, ...]:
+            # Attached records, such as OCR responses, are read with the record.
+            extra = attached[r.source].get(r.record, [])
+            found = (Input(RECORD, r.source, a.id, a.fetch().sha256) for a in extra)
+            return (grammar_input(self.grammars, r), *found)
+
+        by_record = {r.record: r for r in rows}
         planned = []
-        for p in record_plan(name, rows, parse_version, extra=lambda r: (grammar_input(cfg, r),)):
+        for p in record_plan(name, rows, parse_version, extra=inputs):
             planned.append(p)
-            planned.append(Planned(StepKey(CARVE, name, p.key.unit), (p.input,), carve_version))
+            row = by_record[p.key.unit]
+            carve_inputs = (p.input, review_input(cfg, row))
+            planned.append(Planned(StepKey(CARVE, name, p.key.unit), carve_inputs, carve_version))
         return planned
 
     def run(
@@ -207,7 +274,7 @@ class GrammarCruncher:
     def parse(self, cfg: Settings, store: Store, planned: Planned, row: RecordRow) -> CrunchResult:
         record = archive.find(cfg.snarfed, row.source, row.record)
         doc = self.read(cfg, record)
-        nodes, found = parsed(load_grammar(cfg, row), doc)
+        nodes, found = parsed(load_grammar(self.grammars, row), doc)
         indexed = [{"index": i, **line} for i, line in enumerate(doc.lines)]
         built = {
             PARSE_LINES: frame(indexed, LINES_SCHEMA),
@@ -223,7 +290,7 @@ class GrammarCruncher:
         read = {
             name: pl.read_parquet(lay.snapshot_table(cfg, name, row.record)) for name in SNAPSHOTS
         }
-        grammar = load_grammar(cfg, row)
+        grammar = load_grammar(self.grammars, row)
         lines = read[PARSE_LINES].sort("index").to_dicts()
         carved = sections.carve(read[PARSE_NODES].to_dicts(), lines, grammar)
         blob = lines[0]["sha256"] if lines else None
@@ -237,7 +304,9 @@ class GrammarCruncher:
             ),
         }
         counts = checks.counts(read[PARSE_FINDINGS].to_dicts())
-        details = admission(grammar, counts)
+        review, accepted = in_force(cfg, row)
+        changes = since_review(review, accepted, row.record, carved.sections)
+        details = admission(review, counts, changes)
         tables = write_carved(cfg, store, planned, built, self.zone, details)
         return CrunchResult(planned.key.scope, CARVE, row.record, row.jurisdiction, tables)
 
@@ -290,9 +359,9 @@ def resolve(
     if not found:
         raise CrunchError(f"no registered record {record_id} of source {source}")
     row = found[0]
-    name = routing.route(routing.load(cfg), row)
+    name = routing.route(registry.routes, row)
     if name is None:
-        raise CrunchError(f"{record_id}: no route in {routing.FILE}")
+        raise CrunchError(f"{record_id}: no route for source {source} in the registry")
     cruncher = registry.cruncher(name)
     if not isinstance(cruncher, GrammarCruncher):
         raise CrunchError(f"{record_id}: cruncher {name} does not parse with a grammar")

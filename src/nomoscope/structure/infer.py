@@ -1,7 +1,7 @@
 """Draft a grammar with a chat model. The request is billed.
 
 `infer` sends a page sample and `sample.INSTRUCTIONS` to Mistral's API.
-The model's `review` is discarded. Needs the `infer` extra and
+Needs the `infer` extra and
 MISTRAL_API_KEY.
 """
 
@@ -20,7 +20,7 @@ from pydantic_ai.providers.mistral import MistralProvider
 from pydantic_ai.settings import ModelSettings
 
 from nomoscope.structure import sample
-from nomoscope.structure.grammar import Grammar, Review
+from nomoscope.structure.grammar import Grammar
 
 KEY_ENV = "MISTRAL_API_KEY"
 # Output tokens, reasoning included. A reasoning model can think past 16k
@@ -103,8 +103,9 @@ def infer(
     """Ask the model for the document's grammar, showing it the lines of `pages`."""
     result = agent(model, max_tokens).run_sync(sample.render(lines, pages))
     usage = result.usage
-    grammar = result.output.model_copy(update={"review": Review()})
-    return Inferred(grammar, pages, name, usage.input_tokens, usage.output_tokens, usage.requests)
+    return Inferred(
+        result.output, pages, name, usage.input_tokens, usage.output_tokens, usage.requests
+    )
 
 
 def comment(inferred: Inferred) -> str:

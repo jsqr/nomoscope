@@ -18,90 +18,45 @@ Token counts are estimated with CHARS_PER_TOKEN.
 """
 
 import hashlib
-import math
 import re
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
 
 from nomoscope.derive import subdivide
-from nomoscope.errors import NomoscopeError
+from nomoscope.segments import (
+    CHARS_PER_TOKEN,
+    CHARS_PER_WORD,
+    DEFAULT,
+    DEFAULT_LIMIT,
+    TOKENS,
+    UNITS,
+    WORDS,
+    Limit,
+    SegmentError,
+    Settings,
+)
 
-CHARS_PER_TOKEN = 4.0
-
-WORDS = "words"
-TOKENS = "tokens"
-UNITS = (WORDS, TOKENS)
+__all__ = [
+    "CHARS_PER_TOKEN",
+    "CHARS_PER_WORD",
+    "DEFAULT",
+    "DEFAULT_LIMIT",
+    "TOKENS",
+    "UNITS",
+    "WORDS",
+    "Limit",
+    "SegmentError",
+    "Settings",
+]
 
 WHOLE = "whole"
 SUBDIVISION = "subdivision"
 PACKED = "packed"
 
 WORD = re.compile(r"\S+")
-# Statute text averages about six characters per word, with the space.
-# Only the packer's character budget uses this.
-CHARS_PER_WORD = 6.0
 OVERLAP = 0.1
 MAX_CHAPEAU_WORDS = 100
 ENUMERATORS = re.compile(r"^(\(\w+\)\s*)+")
-
-
-class SegmentError(NomoscopeError):
-    pass
-
-
-@dataclass(frozen=True)
-class Limit:
-    size: int = 300
-    unit: str = WORDS
-
-    def __post_init__(self) -> None:
-        if self.unit not in UNITS:
-            raise SegmentError(f"unknown limit unit {self.unit!r}; one of {', '.join(UNITS)}")
-        if self.size < 1:
-            raise SegmentError(f"limit must be positive, not {self.size}")
-
-    def measure(self, text: str) -> int:
-        if self.unit == WORDS:
-            return len(text.split())
-        return math.ceil(len(text) / CHARS_PER_TOKEN)
-
-    def fits(self, text: str) -> bool:
-        return self.measure(text) <= self.size
-
-    @property
-    def max_chars(self) -> int:
-        per = CHARS_PER_WORD if self.unit == WORDS else CHARS_PER_TOKEN
-        return int(self.size * per)
-
-    @property
-    def tag(self) -> str:
-        return f"{self.size}{self.unit}"
-
-
-DEFAULT_LIMIT = Limit()
-
-
-@dataclass(frozen=True)
-class Settings:
-    """The segment limit, and whether a segment's position goes into its context."""
-
-    limit: Limit = DEFAULT_LIMIT
-    positions: bool = False
-
-    @property
-    def tag(self) -> str:
-        """The settings as text, part of the derive step's code version."""
-        return self.limit.tag + ("-pos" if self.positions else "")
-
-
-DEFAULT = Settings()
-
-
-def settings(raw: Mapping[str, Any]) -> Settings:
-    """Settings from the [segments] table of the settings file."""
-    limit = Limit(int(raw.get("limit", Limit.size)), str(raw.get("unit", Limit.unit)))
-    return Settings(limit, bool(raw.get("positions", False)))
 
 
 @dataclass(frozen=True)

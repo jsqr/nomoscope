@@ -296,11 +296,14 @@ infer = [
     { name = "mistralai" },
     { name = "pydantic-ai-slim", extra = ["mistral"] },
 ]
+ocr = [
+    { name = "mistralai" },
+]
 
 [package.dev-dependencies]
 dev = [
     { name = "basedpyright" },
-    { name = "nomoscope", extra = ["infer"] },
+    { name = "nomoscope", extra = ["infer", "ocr"] },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -311,6 +314,7 @@ requires-dist = [
     { name = "httpx" },
     { name = "httpx2", marker = "extra == 'infer'", specifier = ">=2.13.1" },
     { name = "mistralai", marker = "extra == 'infer'", specifier = ">=3.1" },
+    { name = "mistralai", marker = "extra == 'ocr'", specifier = ">=3.1" },
     { name = "polars", extras = ["pyarrow"] },
     { name = "pydantic", specifier = ">=2.14" },
     { name = "pydantic-ai-slim", extras = ["mistral"], marker = "extra == 'infer'", specifier = ">=2.54.0" },
@@ -318,12 +322,12 @@ requires-dist = [
     { name = "tomli-w", specifier = ">=1.2" },
     { name = "typer" },
 ]
-provides-extras = ["infer"]
+provides-extras = ["infer", "ocr"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "basedpyright" },
-    { name = "nomoscope", extras = ["infer"] },
+    { name = "nomoscope", extras = ["infer", "ocr"] },
     { name = "pytest" },
     { name = "ruff" },
 ]

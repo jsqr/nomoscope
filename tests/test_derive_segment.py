@@ -190,11 +190,9 @@ def test_context_lines_up_headings_chapeau_and_place():
     assert segment.context("GOV > 1.", whole, positions=True) == "GOV > 1."
 
 
-def test_settings_read_the_config_table():
-    s = segment.settings({"limit": 500, "unit": "tokens", "positions": True})
-    assert s == segment.Settings(Limit(500, "tokens"), True)
-    assert s.tag == "500tokens-pos"
-    assert segment.settings({}).tag == "300words"
+def test_settings_tag_the_derive_version():
+    assert segment.Settings(Limit(500, "tokens"), True).tag == "500tokens-pos"
+    assert segment.DEFAULT.tag == "300words"
 
 
 def test_a_list_s_closing_lines_are_context_for_every_item():

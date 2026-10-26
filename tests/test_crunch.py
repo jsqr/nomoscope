@@ -7,7 +7,6 @@ from typer.testing import CliRunner
 from nomoscope import cli, settings
 from nomoscope.crunch import CrunchError, runner, schemas
 from nomoscope.crunch.layout import Layout
-from nomoscope.crunch.routes import load as load_routes
 from nomoscope.graph import records, steps
 from nomoscope.graph.steps import CARVE, Planned, Staleness, StepKey
 from nomoscope.graph.store import Store
@@ -126,7 +125,7 @@ def test_the_fake_source_carves_an_import_once(cfg, tmp_path):
     store = Store(cfg)
     with store.open(read_only=True) as conn:
         [rec] = records.records(conn, "fake")
-        [routed] = runner.plans(cfg, conn, fake.REGISTRY, load_routes(cfg))
+        [routed] = runner.plans(cfg, conn, fake.REGISTRY, fake.REGISTRY.routes)
         state = steps.classify(cfg, conn, routed.planned)
         tables = steps.tables(conn, StepKey(CARVE, "fake", rec.record))
     assert set(state.values()) == {Staleness.FRESH}

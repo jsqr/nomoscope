@@ -50,7 +50,11 @@ class Split:
 
 
 def split(text: str, rules: gr.Sections) -> Split:
-    """Split a section's text into text, history, and dropped paragraphs."""
+    """Split a section's text into text, history, and dropped paragraphs.
+
+    History is the trailing paragraphs that match `history`, and a match of
+    `history_tail` at the end of the last paragraph left.
+    """
     drop = [re.compile(r) for r in rules.drop]
     history = [re.compile(r) for r in rules.history]
     kept: list[int] = []
@@ -64,6 +68,13 @@ def split(text: str, rules: gr.Sections) -> Split:
     note: list[str] = []
     while kept and any(r.search(paras[kept[-1]]) for r in history):
         note.insert(0, paras[kept.pop()])
+    if kept:
+        last = paras[kept[-1]]
+        for r in (re.compile(t) for t in rules.history_tail):
+            if m := r.search(last):
+                note.insert(0, last[m.start() :].strip())
+                paras[kept[-1]] = last[: m.start()].rstrip()
+                break
     body = "\n".join(paras[i] for i in kept)
     return Split(body, "\n".join(note) or None, dropped, kept)
 
@@ -123,7 +134,7 @@ def spans(doc: str, parts: Split, subs: list[Row], by_id: dict[str, Row]) -> lis
 
 def carve(nodes: list[Row], lines: list[Row], grammar: gr.Grammar) -> Carved:
     divided = {n["parent_id"] for n in nodes if n["kind"] == "division"}
-    docs, subs, back = documents.build(nodes, lines)
+    docs, subs, back = documents.build(nodes, lines, grammar.sections.hyphens)
     by_doc = {d["node_id"]: d for d in docs}
     by_id = {n["id"]: n for n in nodes}
     subs_of: dict[str, list[Row]] = {}

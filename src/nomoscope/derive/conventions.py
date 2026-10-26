@@ -1,9 +1,9 @@
 """Drafting conventions: the date phrases of history notes, and the words for
 subdivision levels.
 
-Each set of conventions is a file in the config root,
-conventions/<drafting>.toml, where <drafting> is a value of the drafting
-column of law_sections:
+Each set of conventions is a file <drafting>.toml in the project's
+conventions directory (`Registry.conventions`), where <drafting> is a
+value of the drafting column of law_sections:
 
     [history]
     format = "numeric_mdy"    # a parser in history.FORMATS
@@ -26,14 +26,15 @@ import re
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from nomoscope.derive import history
 from nomoscope.derive.subdivide import Levels
 from nomoscope.errors import NomoscopeError
-from nomoscope.settings import Settings
 
-DIR = "conventions"
+# The scope of the conventions input of a derive step.
+SCOPE = "conventions"
 PLACEHOLDERS = {"{MONTH_DATE}": history.MONTH_DATE, "{NUMERIC_DATE}": history.NUMERIC_DATE}
 CONTROLS = ("format", "which", "note")
 
@@ -108,12 +109,12 @@ def parse(files: Mapping[str, Mapping[str, Any]]) -> Conventions:
     return Conventions(found_phrases, found_levels)
 
 
-def load(cfg: Settings) -> Conventions:
+def load(directory: Path | None) -> Conventions:
     """The project's conventions. Empty without a conventions directory."""
-    if cfg.config_root is None or not (cfg.config_root / DIR).is_dir():
+    if directory is None or not directory.is_dir():
         return NONE
     files = {}
-    for path in sorted((cfg.config_root / DIR).glob("*.toml")):
+    for path in sorted(directory.glob("*.toml")):
         try:
             files[path.stem] = tomllib.loads(path.read_text(encoding="utf-8"))
         except tomllib.TOMLDecodeError as e:

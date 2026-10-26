@@ -7,8 +7,9 @@ For a project named app, the settings file is the first of:
     ~/.config/app/config.toml
 
 $APP_DATA_ROOT overrides data_root, and is enough without a file. There is
-no default data root. A relative config_root is relative to the settings
-file.
+no default data root. The settings describe the machine: where the data
+is, the user agent, and where keys are. What the project builds is in its
+registry.
 """
 
 import os
@@ -22,6 +23,14 @@ from nomoscope.errors import NomoscopeError
 
 USER_CONFIG_DIR = Path("~/.config")
 DEFAULT_USER_AGENT = "nomoscope/0.1.0 (+https://github.com/jsqr/nomoscope)"
+
+
+# Settings that left the settings file, and where they went.
+MOVED = {
+    "config_root": "grammars and conventions are directories in the project's registry, "
+    "and its routes are values there",
+    "segments": "the segment settings are in the project's registry",
+}
 
 
 class SettingsError(NomoscopeError):
@@ -44,11 +53,9 @@ def config_basename(app: str) -> str:
 class Settings:
     data_root: Path
     app: str = "nomoscope"
-    config_root: Path | None = None
     user_agent: str = DEFAULT_USER_AGENT
     source_settings: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     path: Path | None = None
-    segments: Mapping[str, Any] = field(default_factory=dict)
 
     def secret(self, source: str, name: str = "key_env") -> str:
         """Return the value of the environment variable named by
@@ -128,17 +135,14 @@ def load(app: str, path: Path | None = None) -> Settings:
             f"no data root: set {env_data_root(app)}, or set data_root in a settings file.\n"
             f"Searched:\n  {searched}"
         )
-    config_root = raw.get("config_root")
-    if config_root is not None:
-        base = path.parent if path is not None else Path.cwd()
-        config_root = (base / Path(config_root).expanduser()).resolve()
+    for key, moved in MOVED.items():
+        if key in raw:
+            raise SettingsError(f"{path}: {key} is no longer a setting; {moved}")
 
     return Settings(
         data_root=Path(data_root).expanduser().resolve(),
         app=app,
-        config_root=config_root,
         user_agent=raw.get("user_agent", DEFAULT_USER_AGENT),
         source_settings=raw.get("sources", {}),
         path=path,
-        segments=raw.get("segments", {}),
     )

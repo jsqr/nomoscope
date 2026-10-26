@@ -7,15 +7,14 @@ because text layers often space out punctuation.
 
 `run_in` describes unnumbered paragraphs that start with a phrase, such
 as a defined term. `sections` says which paragraphs are history and
-which are publisher's notes. `review` records whether a person has
-checked the parse.
+which are publisher's notes. A person's acceptance of a parsed code is
+kept apart from its grammar, in the reviews tables (`crunch/reviews.py`).
 """
 
 import json
 import re
 import tomllib
 from dataclasses import dataclass
-from datetime import date
 from pathlib import Path
 from typing import Literal
 
@@ -25,8 +24,6 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from nomoscope.structure import enumerate as en
 
 FIELD = re.compile(r"\{(\w+)\}")
-_PUNCT = re.compile(r"(\w+|[^\w\s])")
-REVIEWED = "reviewed"
 
 
 def _decoded(value):
@@ -91,6 +88,12 @@ class Level(BaseModel):
         default="none", description="Where the heading text is, relative to the label"
     )
     signals: Signals = Signals()
+    spaced: bool = Field(
+        default=True,
+        description="Allow whitespace between the label's pieces, as text layers print "
+        "'A .'; false requires them to touch where the template has no space, so "
+        "'I . . . do solemnly swear' is not label 'I.'",
+    )
 
     _signals = field_validator("signals", mode="before")(_decoded)
 
@@ -139,6 +142,11 @@ class Form(BaseModel):
     )
     caps: bool = Field(default=False, description="The phrase starts with a word in capitals")
     bold: bool = Field(default=False, description="The form is a whole bold run of the line")
+    followed_by: str | None = Field(
+        default=None,
+        description="Text that must follow the form, and stays in the paragraph, e.g. "
+        "'Means' for 'City Official. Means ...'",
+    )
 
     @model_validator(mode="after")
     def _one_lead(self):
@@ -165,6 +173,12 @@ class Sections(BaseModel):
         description="Regexes; the paragraphs at the end of a section that match one are "
         "its history note, e.g. '^\\(Ord\\. '",
     )
+    history_tail: list[str] = Field(
+        default=[],
+        description="Regexes; a match at the end of the section's last paragraph is "
+        "its history note, printed on the same line as the text, e.g. "
+        "'\\s+\\(Ord\\. [^()]*\\)$'",
+    )
     drop: list[str] = Field(
         default=[],
         description="Regexes; a paragraph that matches one is a publisher's note and is "
@@ -173,6 +187,20 @@ class Sections(BaseModel):
     drafting: str | None = Field(
         default=None, description="The drafting conventions of the sections, by file name"
     )
+    hyphens: Literal["keep", "syllables", "compounds"] = Field(
+        default="keep",
+        description="Words broken at a line end ('autho-' then 'rized'): keep them as "
+        "printed, or rejoin them. A rejoined word loses the hyphen if it occurs "
+        "unbroken elsewhere in the document, and keeps it if it occurs hyphenated "
+        "mid-line ('on-site'); otherwise 'syllables' drops it (justified text breaks "
+        "words anywhere) and 'compounds' keeps it (text that breaks only at hyphens)",
+    )
+    level_names: Literal["style", "depth"] = Field(
+        default="style",
+        description="How subdivisions are named: by the level their enumerator style "
+        "matches, or by their depth below the section, using the subdivision levels' "
+        "names in order (for codes whose sections number their levels differently)",
+    )
     levels: list[str] = Field(
         default=[],
         description="Division levels above the section that are carved as sections when "
@@ -180,23 +208,19 @@ class Sections(BaseModel):
     )
 
     _history = field_validator("history")(_regexes)
+    _history_tail = field_validator("history_tail")(_regexes)
     _drop = field_validator("drop")(_regexes)
 
 
-class Review(BaseModel):
-    """Whether a person has checked the parse, and the finding counts they accepted."""
+class Correction(BaseModel):
+    """A line the document misprints, as the parse should read it.
 
-    status: Literal["draft", "reviewed"] = "draft"
-    by: str | None = None
-    on: date | None = None
-    record: str | None = Field(default=None, description="The record whose parse was checked")
-    findings: dict[str, int] = Field(
-        default={}, description="Findings accepted at review, by check; more of any holds a record"
-    )
+    Only the parse reads the correction: the text keeps the print.
+    """
 
-    @property
-    def reviewed(self) -> bool:
-        return self.status == REVIEWED
+    page: int = Field(description="The page, counting from 1")
+    printed: str = Field(description="The start of the line as printed, e.g. 'b. Authority.'")
+    reads: str = Field(description="What the parse reads in its place, e.g. 'B. Authority.'")
 
 
 class Grammar(BaseModel):
@@ -211,11 +235,23 @@ class Grammar(BaseModel):
         "term, and hold the lettered items after them",
     )
     sections: Sections = Sections()
-    review: Review = Review()
+    corrections: list[Correction] = Field(
+        default=[], description="Misprinted labels, such as 'b.' among A, B, C"
+    )
 
     _skip = field_validator("skip", mode="before")(_decoded)
     _run_in = field_validator("run_in", mode="before")(_decoded)
     _sections = field_validator("sections", mode="before")(_decoded)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _no_review(cls, data):
+        if isinstance(data, dict) and "review" in data:
+            raise ValueError(
+                "[review] is no longer part of a grammar; remove it, and record the review "
+                "with `grammar accept`"
+            )
+        return data
 
     @model_validator(mode="after")
     def _levels(self):
@@ -285,15 +321,27 @@ def compile(level: Level, loose: bool = False) -> Matcher:
     """Return a matcher for `level`'s label at the start of a line.
 
     `loose` makes punctuation after the last field optional, for matching bookmark titles.
+    A level that is not `spaced` allows whitespace only where its template has a space.
     """
-    toks = []
+    toks: list[str] = []
+    gaps: list[bool] = []  # whether the template has a space before each piece
+    gap = False
     for part in re.split(r"(\{\w+\})", level.label):
-        if FIELD.fullmatch(part):
-            toks.append(part)
-        else:
-            toks.extend(_PUNCT.findall(part))
+        pieces = [part] if FIELD.fullmatch(part) else re.findall(r"\s+|\w+|[^\w\s]", part)
+        for tok in pieces:
+            if tok.isspace():
+                gap = True
+                continue
+            toks.append(tok)
+            gaps.append(gap)
+            gap = False
     last = max(i for i, t in enumerate(toks) if FIELD.fullmatch(t))
-    body = r"\s*".join(_piece(t, level, loose and i > last) for i, t in enumerate(toks))
+    tight = not level.spaced and not loose
+    body = "".join(
+        (("\\s+" if gaps[i] else "") if tight else ("\\s*" if i else ""))
+        + _piece(t, level, loose and i > last)
+        for i, t in enumerate(toks)
+    )
     tail = r"(?![\w])" if toks[-1][-1].isalnum() or FIELD.fullmatch(toks[-1]) else ""
     return Matcher(
         level,
@@ -373,6 +421,8 @@ def compile_form(form: Form) -> re.Pattern[str]:
             out += r"\s*"
         lead = rf"(?P<lead>[^\W\d_].{{0,{LEAD_CHARS - 1}}}?)"
         out, spaced = out + (lead if tok == "{lead}" else _form_piece(tok)), False
+    if form.followed_by:
+        out += rf"(?=\s*{re.escape(form.followed_by)})"
     return re.compile(out)
 
 

@@ -1,21 +1,26 @@
-"""The grammar commands: sample, infer, check, and review.
+"""The grammar commands: sample, infer, check, review, and accept.
 
 `grammar infer` makes a billed request.
 """
 
+import getpass
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
 from nomoscope.cli.common import fail, load_settings
-from nomoscope.crunch import grammared
+from nomoscope.crunch import grammared, reviews
 from nomoscope.crunch.registry import Registry
 from nomoscope.errors import NomoscopeError
+from nomoscope.graph import fingerprint
 from nomoscope.graph.store import Store
+from nomoscope.settings import Settings
+from nomoscope.snarf import attach
 from nomoscope.snarf.run import blob_store
-from nomoscope.structure import checks, review, sample
+from nomoscope.structure import checks, review, sample, sections
 from nomoscope.structure import grammar as gr
 from nomoscope.structure import lines as linelib
 
@@ -58,7 +63,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         typer.echo(text)
         typer.echo(
             f"{len(doc.lines)} lines; sample of about {sample.tokens(text)} tokens."
-            f" Grammar goes to {grammared.grammar_path(cfg, row)}",
+            f" Grammar goes to {grammared.grammar_path(cruncher.grammars, row)}",
             err=True,
         )
 
@@ -75,8 +80,9 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         cfg = load_settings(name)
         try:
             cruncher, row, found = grammared.resolve(cfg, Store(cfg), registry, source, record)
-            g = gr.load(grammar) if grammar else grammared.load_grammar(cfg, row)
-            checked = grammared.check(g, cruncher.read(cfg, found))
+            g = gr.load(grammar) if grammar else grammared.load_grammar(cruncher.grammars, row)
+            review, accepted = grammared.in_force(cfg, row)
+            checked = grammared.check(g, cruncher.read(cfg, found), review, accepted, record)
         except (NomoscopeError, ValueError) as e:
             raise fail(str(e)) from e
         report(checked, limit)
@@ -96,13 +102,16 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         cfg = load_settings(name)
         try:
             cruncher, row, found = grammared.resolve(cfg, Store(cfg), registry, source, record)
-            path = grammar or grammared.grammar_path(cfg, row)
-            g = gr.load(grammar) if grammar else grammared.load_grammar(cfg, row)
+            path = grammar or grammared.grammar_path(cruncher.grammars, row)
+            g = gr.load(grammar) if grammar else grammared.load_grammar(cruncher.grammars, row)
             doc = cruncher.read(cfg, found)
         except (NomoscopeError, ValueError) as e:
             raise fail(str(e)) from e
         nodes, findings = grammared.parsed(g, doc)
-        a = grammared.admission(g, checks.counts(findings))
+        carved = sections.carve(nodes, doc.lines, g).sections
+        review_row, accepted = grammared.in_force(cfg, row)
+        changes = grammared.since_review(review_row, accepted, record, carved)
+        a = grammared.admission(review_row, checks.counts(findings), changes)
         target = out or cfg.data_root / REVIEW / source / record
         target.mkdir(parents=True, exist_ok=True)
         href = None
@@ -112,20 +121,72 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
             link = target / href
             link.unlink(missing_ok=True)
             link.symlink_to(blob_store(cfg).path(first["sha256"]))
-        held = "admitted" if a["admitted"] else f"held (worse {a['worse']})"
         header = [
             ("record", record),
             ("source", source),
             ("jurisdiction", row.jurisdiction),
             ("code", row.code),
             ("grammar", str(path)),
-            ("review", str(a["review"])),
+            ("review", describe(review_row)),
+            ("note", (review_row.note if review_row else None) or "none"),
             ("findings", str(a["findings"] or "none")),
-            ("derive", held),
+            ("derive", grammared.held(a)),
+            (
+                "changed since review",
+                "; ".join(f"{c['section_num']} ({c['change']})" for c in changes or []) or "none",
+            ),
+            ("attached", attached_records(cfg, source, record)),
+            (
+                "corrections",
+                "; ".join(f"p{c.page} {c.printed!r} -> {c.reads!r}" for c in g.corrections)
+                or "none",
+            ),
         ]
         page = review.render(nodes, doc.lines, g, findings, header, href if doc.pages else None)
         (target / "index.html").write_text(page, encoding="utf-8")
         typer.echo(target / "index.html")
+
+    @group.command("accept")
+    def accept(
+        source: Source,
+        record: RecordId,
+        by: Annotated[
+            str | None, typer.Option(help="Who accepts; default the current user")
+        ] = None,
+        note: Annotated[
+            str | None, typer.Option(help="Why the findings are accepted, check by check")
+        ] = None,
+    ) -> None:
+        """Accept a record's parsed code, with the findings `grammar check` reports.
+
+        Derive then uses the code. It leaves the code out again if a later
+        record has more findings, or if a section of this record changes.
+        """
+        cfg = load_settings(name)
+        try:
+            cruncher, row, found = grammared.resolve(cfg, Store(cfg), registry, source, record)
+            path = grammared.grammar_path(cruncher.grammars, row)
+            g = grammared.load_grammar(cruncher.grammars, row)
+            doc = cruncher.read(cfg, found)
+        except (NomoscopeError, ValueError) as e:
+            raise fail(str(e)) from e
+        assert path is not None
+        checked = grammared.check(g, doc, None, None, record)
+        now = datetime.now(UTC)
+        review_row = reviews.Review(
+            review_id=reviews.review_id(now, record),
+            source=source,
+            jurisdiction=row.jurisdiction,
+            law_code=row.code,
+            record=record,
+            reviewed_by=by or getpass.getuser(),
+            reviewed_at=now.replace(tzinfo=None),
+            findings=checks.counts(checked.findings),
+            grammar_sha256=fingerprint.file_sha256(path),
+            note=note,
+        )
+        reviews.write(cfg, review_row, reviews.summary(checked.sections))
+        typer.echo(f"{describe(review_row)}; {len(checked.sections)} sections")
 
     @group.command("infer")
     def infer_(
@@ -162,9 +223,9 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         model_name = os.environ.get(model_env(name))
         if not model_name:
             raise fail(f"set {model_env(name)} to the model id")
-        target = out or grammared.grammar_path(cfg, row)
+        target = out or grammared.grammar_path(cruncher.grammars, row)
         if target is None:
-            raise fail("no config_root; pass --out")
+            raise fail("the cruncher has no grammars directory; pass --out")
         if target.exists() and not force:
             raise fail(f"{target} exists; pass --out or --force")
         try:
@@ -190,6 +251,19 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         typer.echo(
             f"{target}: {inferred.input_tokens} tokens in, {inferred.output_tokens} out", err=True
         )
+
+
+def describe(review: reviews.Review | None) -> str:
+    if review is None:
+        return "none"
+    found = review.findings or "no findings"
+    on = f"{review.reviewed_at:%Y-%m-%d}"
+    return f"{review.record} accepted by {review.reviewed_by} on {on}, {found}"
+
+
+def attached_records(cfg: Settings, source: str, record: str) -> str:
+    found = attach.index(cfg, source).get(record, [])
+    return ", ".join(f"{r.fetch().feed} {r.id}" for r in found) or "none"
 
 
 def model_env(name: str) -> str:
@@ -220,5 +294,10 @@ def report(checked: grammared.Checked, limit: int) -> None:
             typer.echo(f"  {name:10} {line}")
         if len(shown) > limit:
             typer.echo(f"  {name:10} ... {len(shown) - limit} more")
-    held = "admitted" if a["admitted"] else f"held (review {a['review']}, worse {a['worse']})"
-    typer.echo(f"derive:    {held}")
+    if checked.changes:
+        typer.echo(f"changed:   {len(checked.changes)} sections since review")
+        for c in checked.changes[:limit]:
+            typer.echo(f"  {c['section_num'] or c['node_treepath']:12} {c['change']}")
+        if len(checked.changes) > limit:
+            typer.echo(f"  ... {len(checked.changes) - limit} more")
+    typer.echo(f"derive:    {grammared.held(a)}")

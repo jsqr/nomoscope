@@ -2,7 +2,6 @@ import pytest
 
 from nomoscope.derive import conventions
 from nomoscope.derive.conventions import ConventionsError
-from nomoscope.settings import Settings
 from tests import conventions as data
 
 
@@ -10,12 +9,13 @@ def history(**raw):
     return {"x": {"history": {"format": "numeric_mdy", "which": "last", **raw}}}
 
 
-def test_the_files_load_from_the_config_root(tmp_path):
-    data.write(tmp_path)
-    found = conventions.load(Settings(data_root=tmp_path, config_root=tmp_path))
+def test_the_files_load_from_the_conventions_directory(tmp_path):
+    data.write(tmp_path / "conventions")
+    found = conventions.load(tmp_path / "conventions")
     assert found == data.CONVENTIONS
     assert sorted(found.phrases) == ["ca", "fake", "il", "tx"]
-    assert conventions.load(Settings(data_root=tmp_path)) == conventions.NONE
+    assert conventions.load(None) == conventions.NONE
+    assert conventions.load(tmp_path / "missing") == conventions.NONE
 
 
 def test_placeholders_stand_for_the_date_patterns():

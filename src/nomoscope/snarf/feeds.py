@@ -48,6 +48,8 @@ class Feed:
     collect: Collector | None = None
     listing: Listing | None = None
     delay: float = 0.0
+    # False for a feed of attached records (snarf/attach.py), which no cruncher reads alone.
+    crunchable: bool = True
 
     def __post_init__(self) -> None:
         if any(d not in WEEKDAYS for d in self.days) or len(set(self.days)) != len(self.days):
@@ -112,7 +114,7 @@ class Source:
             code=params.get("code", ""),
             session=params.get("session"),
             completeness=params.get("completeness", self.feed(fetch.feed).completeness),
-            crunchable=True,
+            crunchable=self.feed(fetch.feed).crunchable,
         )
 
     def request_headers(self, cfg: Settings) -> Mapping[str, str]:

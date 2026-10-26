@@ -14,7 +14,6 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         cfg = load_settings(name)
         typer.echo(f"settings:    {cfg.path or '(none; ' + settings.env_data_root(name) + ')'}")
         typer.echo(f"data_root:   {cfg.data_root}")
-        typer.echo(f"config_root: {cfg.config_root or '(none)'}")
         typer.echo(f"user_agent:  {cfg.user_agent}")
         typer.echo(f"graph:       {cfg.graph}")
         typer.echo(f"catalog:     {cfg.catalog}")

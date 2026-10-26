@@ -6,6 +6,7 @@ import typer
 
 from nomoscope.catalog import build as catalog
 from nomoscope.cli.common import fail, load_settings
+from nomoscope.cli.jurisdictions import FETCH
 from nomoscope.crunch.registry import Registry
 from nomoscope.derive import build, reference
 from nomoscope.errors import NomoscopeError
@@ -27,10 +28,12 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
             store = Store(cfg)
             results = [
                 *reference.build(cfg, store, force=force),
-                *build.build(cfg, store, jurisdiction, force=force),
+                *build.build(cfg, store, registry, jurisdiction, force=force),
             ]
         except NomoscopeError as e:
             raise fail(str(e)) from e
+        if not reference.census_records(cfg):
+            typer.echo(f"jurisdictions: no Census records; fetch them with `{name} {FETCH}`")
         if not results:
             typer.echo("nothing to derive")
         for r in results:

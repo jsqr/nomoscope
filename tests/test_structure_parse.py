@@ -342,3 +342,57 @@ def test_small_print_is_notes():
     section = by_id(rows)["5-1"]
     assert section["text"] == "The Town finds that fires happen."
     assert section["notes"] == ["1. Editor's Note: Amended 2020."]
+
+
+def test_levels_named_by_depth():
+    g = GRAMMAR.model_copy(update={"sections": gr.Sections(level_names="depth")})
+    rows = parse(
+        lines(
+            ("§ 5-1. Usual.", 72, B), ("A. First.", 72), ("(1) Item.", 96),
+            ("§ 5-2. Numbers first.", 72, B), ("(1) Item.", 96), ("(a) Sub.", 120),
+            ("§ 5-3. Letters first.", 72, B), ("(a) Sub.", 120), ("(1) Item.", 96),
+        ),
+        g,
+    )  # fmt: skip
+    nodes = by_id(rows)
+    assert (nodes["5-1/A"]["level"], nodes["5-1/A/1"]["level"]) == ("subsection", "paragraph")
+    assert (nodes["5-2/1"]["level"], nodes["5-2/1/a"]["level"]) == ("subsection", "paragraph")
+    assert nodes["5-2/1"]["style"] == "arabic"
+    assert nodes["5-3/a"]["level"] == "subsection"
+
+
+def test_followed_by_keeps_the_word_in_the_definition():
+    g = RUN_IN.model_copy(
+        update={
+            "run_in": gr.RunIn(
+                forms=[gr.Form(form="{lead}.", followed_by="Means")],
+            )
+        }
+    )
+    rows = parse(
+        lines(
+            ("§ 1. Definitions.", 72, B),
+            ("In this chapter the following terms apply.", 72),
+            ("City Official. Means a person who holds office.", 72),
+            ("Organization. Means any business.", 72),
+        ),
+        g,
+    )
+    nodes = by_id(rows)
+    assert [r["id"] for r in rows] == ["", "1", "1/city-official", "1/organization"]
+    assert nodes["1/city-official"]["label"] == "City Official."
+    assert nodes["1/city-official"]["text"] == "Means a person who holds office."
+    assert nodes["1"]["text"] == "In this chapter the following terms apply."
+
+
+def test_a_correction_reads_a_misprinted_label():
+    g = GRAMMAR.model_copy(
+        update={"corrections": [gr.Correction(page=1, printed="b. Second.", reads="B. Second.")]}
+    )
+    rows = parse(
+        lines(("§ 5-1. Terms.", 72, B), ("A. First.", 72), ("b. Second.", 72), ("C. Third.", 72)),
+        g,
+    )
+    nodes = by_id(rows)
+    assert [r["id"] for r in rows if r["parent_id"] == "5-1"] == ["5-1/A", "5-1/B", "5-1/C"]
+    assert (nodes["5-1/B"]["label"], nodes["5-1/B"]["text"]) == ("B.", "Second.")

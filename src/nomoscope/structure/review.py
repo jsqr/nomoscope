@@ -105,7 +105,7 @@ def render(
     by_id = {n["id"]: n for n in nodes}
     carved = sections.carve(nodes, lines, grammar)
     by_section = {s["node_id"]: s for s in carved.sections}
-    docs = {d["node_id"]: d for d in documents.build(nodes, lines)[0]}
+    docs = {d["node_id"]: d for d in documents.build(nodes, lines, grammar.sections.hyphens)[0]}
     found: dict[str | None, list[Row]] = {}
     for f in findings:
         found.setdefault(f["node_id"], []).append(f)

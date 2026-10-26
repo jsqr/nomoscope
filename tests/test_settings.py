@@ -74,30 +74,26 @@ def test_env_data_root_alone_needs_no_file(tmp_path, monkeypatch):
     monkeypatch.setenv("PROJ_DATA_ROOT", str(tmp_path / "d"))
     cfg = settings.load(APP)
     assert cfg.path is None
-    assert cfg.config_root is None
     assert cfg.user_agent == settings.DEFAULT_USER_AGENT
 
 
-def test_config_root_is_taken_from_the_files_directory(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    write(
-        tmp_path / "repo" / "proj.toml",
-        extra='config_root = "config"\nuser_agent = "proj/1 (ops@example.org)"\n',
-    )
-    cfg = settings.load(APP, tmp_path / "repo" / "proj.toml")
-    assert cfg.config_root == tmp_path / "repo" / "config"
-    assert cfg.user_agent == "proj/1 (ops@example.org)"
-
-
-def test_source_and_segment_settings_are_passed_through(tmp_path, monkeypatch):
+def test_source_settings_and_user_agent_are_passed_through(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     write(
         tmp_path / "proj.toml",
-        extra='[sources.codifier]\nkey_env = "K"\n[segments]\nlimit = 200\n',
+        extra='user_agent = "proj/1 (ops@example.org)"\n[sources.codifier]\nkey_env = "K"\n',
     )
     cfg = settings.load(APP)
     assert cfg.source_settings["codifier"]["key_env"] == "K"
-    assert cfg.segments == {"limit": 200}
+    assert cfg.user_agent == "proj/1 (ops@example.org)"
+
+
+@pytest.mark.parametrize("extra", ['config_root = "config"\n', "[segments]\nlimit = 200\n"])
+def test_a_setting_that_moved_to_the_registry_is_refused(tmp_path, monkeypatch, extra):
+    monkeypatch.chdir(tmp_path)
+    write(tmp_path / "proj.toml", extra=extra)
+    with pytest.raises(settings.SettingsError, match="registry"):
+        settings.load(APP)
 
 
 def test_a_secret_is_read_from_the_variable_the_file_names(tmp_path, monkeypatch):

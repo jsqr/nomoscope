@@ -1,81 +1,35 @@
-"""The reference datasets, built from tables in the package and the config root.
+"""The reference datasets.
 
 jurisdictions lists each jurisdiction id with its name, kind, parent, and
-Census codes. The package holds the country, the states, and DC. A
-project adds its own in jurisdictions.csv in the config root.
+Census codes. It is built from the latest Census records in the archive
+(`derive/census.py`), and is not built until there are some. Every
+jurisdiction that a crunchable record is registered under must be in it.
 """
 
-import hashlib
+from collections.abc import Mapping
 from dataclasses import dataclass
-from importlib import resources
 
 import polars as pl
 
-from nomoscope.derive import registry
+from nomoscope.derive import census, registry
 from nomoscope.errors import NomoscopeError
-from nomoscope.graph import fingerprint, steps
+from nomoscope.graph import fingerprint, records, steps
+from nomoscope.graph.records import RECORD
 from nomoscope.graph.steps import REFERENCE, Input, Planned, Staleness, StepKey
 from nomoscope.graph.store import Store
 from nomoscope.parquet import write_parquet
 from nomoscope.partition import check_jurisdiction, reference_path
 from nomoscope.settings import Settings
+from nomoscope.snarf import archive
+from nomoscope.snarf import census as census_source
+from nomoscope.snarf.run import blob_store
 
-VERSION = "1"
-FILE = "jurisdictions.csv"
-SCHEMA = pl.Schema(
-    {
-        "id": pl.String,
-        "name": pl.String,
-        "kind": pl.String,
-        "parent": pl.String,
-        "state_fips": pl.String,
-        "county_fips": pl.String,
-        "place_fips": pl.String,
-        "geoid": pl.String,
-    }
-)
+VERSION = "2"
+SCHEMA = census.SCHEMA
 
 
 class ReferenceError(NomoscopeError):
     pass
-
-
-@dataclass(frozen=True)
-class Table:
-    name: str
-    data: bytes
-
-    @property
-    def input(self) -> Input:
-        stage, scope = ("package", "nomoscope.derive") if self.name == FILE else ("config", "")
-        return Input(stage, scope, self.name, hashlib.sha256(self.data).hexdigest())
-
-
-def tables(cfg: Settings) -> list[Table]:
-    """The package's table, then the project's if it has one."""
-    found = [Table(FILE, resources.files(__package__).joinpath(FILE).read_bytes())]
-    if cfg.config_root is not None and (cfg.config_root / FILE).is_file():
-        found.append(Table(str(cfg.config_root / FILE), (cfg.config_root / FILE).read_bytes()))
-    return found
-
-
-def jurisdictions(*found: Table) -> pl.DataFrame:
-    """Concatenate the tables and check that ids are valid and unique and parents exist."""
-    try:
-        frame = pl.concat([pl.read_csv(t.data, schema=SCHEMA) for t in found])
-    except pl.exceptions.PolarsError as e:
-        raise ReferenceError(f"{', '.join(t.name for t in found)}: {e}") from e
-    for value in frame["id"]:
-        check_jurisdiction(value)
-    duplicated = frame.filter(pl.col("id").is_duplicated())["id"].unique().to_list()
-    if duplicated:
-        raise ReferenceError(f"{FILE}: duplicate ids {sorted(duplicated)}")
-    orphans = frame.filter(
-        pl.col("parent").is_not_null() & ~pl.col("parent").is_in(frame["id"].implode())
-    )["id"].to_list()
-    if orphans:
-        raise ReferenceError(f"{FILE}: parents not in the table for {sorted(orphans)}")
-    return frame.sort("id")
 
 
 @dataclass(frozen=True)
@@ -88,31 +42,85 @@ class ReferenceResult:
         return f"{self.dataset:24} reference {self.rows:9} rows"
 
 
-def plan(found: list[Table]) -> Planned:
+def census_records(cfg: Settings) -> dict[str, archive.Record]:
+    """The latest Census record of each feed that has one."""
+    found = {}
+    for feed in census_source.FEEDS:
+        record = archive.latest_record(cfg.snarfed, census_source.ID, feed)
+        if record is not None:
+            found[feed] = record
+    return found
+
+
+def files(cfg: Settings, found: Mapping[str, archive.Record]) -> dict[str, bytes]:
+    store = blob_store(cfg)
+    out = {}
+    for feed, record in found.items():
+        [item] = record.items()
+        out[feed] = store.read(item.sha256)
+    return out
+
+
+def jurisdictions(cfg: Settings, found: Mapping[str, archive.Record]) -> pl.DataFrame:
+    """The table, with each id checked."""
+    frame = census.jurisdictions(files(cfg, found))
+    for value in frame["id"]:
+        check_jurisdiction(value)
+    return frame
+
+
+def plan(found: Mapping[str, archive.Record]) -> Planned:
     return Planned(
         StepKey(REFERENCE, registry.JURISDICTIONS, ""),
-        tuple(t.input for t in found),
+        tuple(
+            Input(RECORD, census_source.ID, r.id, r.fetch().sha256)
+            for _, r in sorted(found.items())
+        ),
         fingerprint.code_version(VERSION, SCHEMA),
     )
 
 
+def unknown(cfg: Settings, store: Store) -> list[str]:
+    """Jurisdictions that registered records name and the table lacks."""
+    path = reference_path(cfg, registry.JURISDICTIONS)
+    known = set(pl.read_parquet(path, columns=["id"])["id"])
+    with store.open(read_only=True) as conn:
+        return [j for j in records.jurisdictions(conn) if j not in known]
+
+
 def build(cfg: Settings, store: Store, *, force: bool = False) -> list[ReferenceResult]:
-    found = tables(cfg)
+    """Build the jurisdictions dataset when its Census records change.
+
+    Nothing without Census records. Raises if some feeds have no record, or
+    if a registered record's jurisdiction is not in the table.
+    """
+    found = census_records(cfg)
+    if not found:
+        return []
+    missing = [f for f in census_source.FEEDS if f not in found]
+    if missing:
+        raise ReferenceError(f"no Census record of {', '.join(missing)}; fetch them")
     planned = plan(found)
+    results = []
     with store.open() as conn:
         state = steps.classify(cfg, conn, [planned])[planned.key]
-        if state is Staleness.FRESH and not force:
-            return []
-        frame = jurisdictions(*found)
-        path = reference_path(cfg, registry.JURISDICTIONS)
-        write_parquet(frame, path)
-        row = steps.table_row(
-            cfg,
-            registry.JURISDICTIONS,
-            path,
-            frame.schema,
-            frame.height,
-            sha256=fingerprint.file_sha256(path),
+        if state is not Staleness.FRESH or force:
+            frame = jurisdictions(cfg, found)
+            path = reference_path(cfg, registry.JURISDICTIONS)
+            write_parquet(frame, path)
+            row = steps.table_row(
+                cfg,
+                registry.JURISDICTIONS,
+                path,
+                frame.schema,
+                frame.height,
+                sha256=fingerprint.file_sha256(path),
+            )
+            steps.record(conn, planned, [row])
+            results.append(ReferenceResult(registry.JURISDICTIONS, frame.height))
+    absent = unknown(cfg, store)
+    if absent:
+        raise ReferenceError(
+            f"registered jurisdictions not in the Census table: {', '.join(absent)}"
         )
-        steps.record(conn, planned, [row])
-    return [ReferenceResult(registry.JURISDICTIONS, frame.height)]
+    return results

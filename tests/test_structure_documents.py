@@ -1,6 +1,7 @@
 import hashlib
 
 from nomoscope.structure import documents
+from nomoscope.structure import grammar as gr
 from nomoscope.structure.parse import parse
 from tests.structure import GRAMMAR, B, C, lines
 
@@ -78,3 +79,50 @@ def test_a_subdivision_at_the_top_of_a_page_starts_a_line():
     text = section_text(found)
     assert text.startswith("A. First. Line 0 continues")
     assert text.endswith("Line 17 continues\nB. Second.")
+
+
+def hyphen_text(*rows, mode: str = "compounds") -> str:
+    g = GRAMMAR.model_copy(update={"sections": gr.Sections(hyphens=mode)})
+    found = lines(("§ 5-1. Purpose.", 72, B), *rows)
+    docs, _, back = documents.build(parse(found, g), found, mode)
+    section = next(d for d in docs if d["citation"] == "5-1")
+    for b in back:
+        if b["document"] == section["node_id"]:
+            assert section["text"][b["start_char"] : b["end_char"]].strip()
+    return section["text"]
+
+
+def test_rejoin_drops_a_syllable_hyphen_and_keeps_a_compound():
+    near = {"gap_before": 13.0}
+    text = hyphen_text(
+        ("The permit is autho-", 72),
+        ("rized by the clerk on-", 72, near),
+        ("site, as authorized.", 72, near),
+    )
+    assert text == "The permit is authorized by the clerk on-site, as authorized."
+
+
+def test_rejoin_leaves_a_new_subdivision_alone():
+    text = hyphen_text(("A. A pre-", 72), ("(1) item.", 96))
+    assert text == "A. A pre-\n(1) item."
+
+
+def test_keep_leaves_broken_words_as_printed():
+    found = lines(("§ 5-1. Purpose.", 72, B), ("autho-", 72), ("rized.", 72, {"gap_before": 13.0}))
+    docs, _, _ = documents.build(parse(found, GRAMMAR), found)
+    assert next(d for d in docs if d["citation"] == "5-1")["text"] == "autho- rized."
+
+
+def test_syllables_drops_an_unknown_hyphen_but_keeps_a_known_compound():
+    near = {"gap_before": 13.0}
+    text = hyphen_text(
+        ("Any ambigu-", 72),
+        ("ities in a decision-", 72, near),
+        ("making process, by decision-making bodies, in three-", 72, near),
+        ("tiered review of every three or more tiered plan.", 72, near),
+        mode="syllables",
+    )
+    assert text == (
+        "Any ambiguities in a decision-making process, by decision-making bodies, in "
+        "three-tiered review of every three or more tiered plan."
+    )

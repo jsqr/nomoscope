@@ -2,6 +2,7 @@ from typer.testing import CliRunner
 
 from nomoscope import cli
 from nomoscope.crunch.registry import Registry
+from nomoscope.crunch.routes import ANY, Route
 from nomoscope.snarf import archive
 from nomoscope.snarf.feeds import Feed, Source
 from tests import fake
@@ -19,7 +20,6 @@ def test_settings_prints_the_resolved_roots_and_the_registry(cfg):
     out = invoke("settings")
     assert out.exit_code == 0, out.output
     assert f"data_root:   {cfg.data_root}" in out.output
-    assert f"config_root: {cfg.config_root}" in out.output
     assert "sources:     manual" in out.output and "crunchers:   (none)" in out.output
 
 
@@ -50,10 +50,8 @@ def test_commands_report_user_errors_without_a_traceback(cfg, tmp_path):
     missing = invoke("snarf", "fetch", "manual")
     assert missing.exit_code == 1 and "choose feeds" in missing.output
     invoke("snarf", "import", "manual", str(path), "--feed", "code", "-p", "jurisdiction=us-il")
-    (cfg.config_root / "crunchers.csv").write_text(
-        "source,jurisdiction,law_code,cruncher,valid_from\nmanual,*,*,absent,\n"
-    )
-    unregistered = invoke("crunch")
+    routed = Registry(sources={SRC.id: SRC}, routes=(Route("manual", ANY, ANY, "absent"),))
+    unregistered = CliRunner().invoke(cli.app(routed, fake.APP), ["crunch"])
     assert unregistered.exit_code == 1 and "unknown cruncher 'absent'" in unregistered.output
 
 

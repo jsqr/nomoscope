@@ -15,40 +15,42 @@ $data_root/
   sources/crunched/    tables built from the archive, by cruncher
   derived/             tables in the shared layout
   staging/             downloads in progress
-  review/              HTML views of parses, from `grammar review`
+  reviews/             acceptances of parsed codes, from `grammar accept`
+  review/              HTML views of parsed codes, from `grammar review`
   graph.duckdb         the graph store
-  catalog.duckdb       views over derived/
+  catalog.duckdb       views over derived/ and reviews/
 ```
 
 Each tier can be rebuilt from the one before it. The archive cannot be
-rebuilt, because a source may stop serving a file. `staging/` and
+rebuilt, because a source may stop serving a file. `reviews/` cannot be
+rebuilt either, because it records people's decisions. `staging/` and
 `review/` are safe to delete.
 
 The graph store records each step's inputs, code version, and output
 tables. A step reruns when one of these changes or an output file is
 missing. `status` summarizes the store. `graph show` lists every step.
 
-## Config root
+## The project's registry
 
-The project's config tables are under `config_root`:
+The settings file describes the machine: where the data root is, the user
+agent, and which environment variables hold keys. Everything that decides
+what the project builds is in the registry it passes to `cli.app`:
 
-```
-$config_root/
-  crunchers.csv        which cruncher reads each record
-  conventions/*.toml   drafting conventions
-  jurisdictions.csv    the project's jurisdictions
-  grammars/<source>/<jurisdiction>/<code>.toml   a code's grammar
-```
+- its sources and crunchers;
+- its routes, which send each record to a cruncher;
+- its segment settings, which derive cuts text with;
+- its directory of drafting conventions, `<drafting>.toml` files.
 
-Each file is optional. Each is an input of the steps that read it, so a
-change reruns them.
+A `GrammarCruncher` is created with its directory of grammars,
+`<source>/<jurisdiction>/<code>.toml` files. Grammars and conventions are
+inputs of the steps that read them, so a change reruns those steps.
 
 ## Stages
 
 | stage | command | reads | writes |
 | --- | --- | --- | --- |
 | snarf | `snarf fetch`, `snarf due`, `snarf import` | a source, or local files | `sources/snarfed/` |
-| crunch | `crunch` | `sources/snarfed/`, `crunchers.csv`, grammars | `sources/crunched/<cruncher>/` |
+| crunch | `crunch` | `sources/snarfed/`, routes, grammars | `sources/crunched/<cruncher>/` |
 | derive | `derive` | carved tables, conventions, jurisdictions | `derived/`, the catalog |
 | query | `sql "<query>"` | `catalog.duckdb` | nothing |
 
@@ -70,6 +72,19 @@ import.
 A record can also hold a tree of files. Its manifest lists every file,
 and its hash is the manifest's hash.
 
+A record can have attached records (`snarf/attach.py`): files made from it,
+such as OCR responses for a PDF, archived because they cannot be made
+again for free. An attached record's params name its record (`of`) and
+repeat that record's params; its feed is not crunchable, so it is never
+routed to a cruncher. The grammared cruncher reads it with its record, and
+attaching one reruns that record's parse.
+
+`ocr run <source> <record>` OCRs a record's PDF in segments of pages
+(billed; the `ocr` extra; `--dry-run` shows pages and requests) and
+attaches the responses (feed `ocr`). `ocr import` attaches responses made
+elsewhere for the same file. Where a PDF has OCR, each table is read from
+its OCR `table` block, as markdown rows, instead of from the text layer.
+
 `snarf import` archives local files with a `file://` URL. The params
 record the importer and the file's modification time. The modification
 time is not used as the publication date. Importing the same bytes again
@@ -82,7 +97,7 @@ with its jurisdiction, code, session, and completeness. By default these
 come from the record's params. The code is empty when the record carries
 every code, as a state's bulk download does.
 
-`crunchers.csv` then assigns each record a cruncher:
+The registry's routes then assign each record a cruncher:
 
 | source | jurisdiction | law_code | cruncher | valid_from |
 | --- | --- | --- | --- | --- |
@@ -124,10 +139,25 @@ names higher levels whose divisions are carved as sections when nothing
 divides them, such as a definitions chapter without sections; the
 `unsectioned` check reports numbered ones that are not.
 
-A grammar's `[review]` records whether a person has checked its parse, and
-how many findings of each check were accepted. A carve is held, and derive
-does not read it, until the review is `reviewed` and no check has more
-findings than it accepted. `status` counts held carves. `grammar sample`
+After a person has reviewed a record's parsed code, `grammar accept`
+records their acceptance in two tables under `reviews/`. `reviews` has one
+row per acceptance: the code, the record, who accepted it and when, the
+finding counts of each check, the grammar's hash, and a note on why the
+findings are acceptable. `reviewed_sections` has one row per section of
+that record, with its heading, history, and hashes of its text and its
+subdivisions. Each acceptance adds files and replaces none, so the tables
+keep every acceptance; the latest one for a code is in force. The catalog
+has a view of each table.
+
+A carve is held, and derive does not read it, until three things are true.
+Someone has accepted a record of the code. No check has more findings than
+they accepted. And, if this is the record they accepted, every section
+still matches what they accepted. A change in nomoscope, in the grammar,
+or in an attached OCR record can change a section without adding a
+finding, and this comparison catches it. A later record of the same code,
+such as a new supplement, is judged on its findings alone. `grammar check`
+lists the sections that changed, and `status` counts held carves.
+`grammar sample`
 prints a record's lines for drafting a grammar, and `grammar infer`
 drafts one with a chat model (billed; the `infer` extra). `grammar check`
 parses a record with a grammar and writes nothing. `grammar review` writes
@@ -192,9 +222,24 @@ given date is a query (see "The catalog").
 Jurisdiction ids are ISO 3166-2 codes in lower case, extended with `-`:
 `us`, `us-il`, `us-il-chicago`, `us-ca-los_angeles_county`. The
 `jurisdictions` dataset gives each one's name, kind, parent, and Census
-codes (`state_fips`, `county_fips`, `place_fips`, `geoid`). nomoscope
-includes the country, the states, and DC. A project adds its own in
-`jurisdictions.csv` in the config root.
+codes (`state_fips`, `county_fips`, `place_fips`, `geoid`).
+
+The dataset is built from the Census Bureau's files, which a project
+fetches through the `census` source (`snarf/census.py`):
+
+```
+snarf fetch census -f states -f counties -f places -f cousubs -p year=2024
+```
+
+It holds the country, the states and territories, every county, and the
+places and county subdivisions with a functioning government; statistical
+areas such as CDPs are left out. `derive/census.py` gives the rules for
+ids, including names that two governments in a state share.
+`jurisdictions find <name> --state <st>` prints the ids that match a name.
+Without Census records the dataset is not built. With them, derive stops
+if a registered record names a jurisdiction the dataset lacks. Ids must
+not change once records use them, and this check catches a Census year
+that would change one.
 
 Other ids join the jurisdiction, a kind, and the source's keys with `/`:
 
@@ -281,8 +326,8 @@ The catalog's `law_in_force` gives each version's interval in force:
 
 Drafting conventions give the date phrases in history notes and the
 words for subdivision levels. They belong to a codifier's format, which
-can cover many jurisdictions. Each set is a file,
-`conventions/<drafting>.toml`, in the config root.
+can cover many jurisdictions. Each set is a file, `<drafting>.toml`, in
+the conventions directory the registry names.
 `src/nomoscope/derive/conventions.py` gives the format. A section with no
 conventions has no stated dates and no level words. Any change to the
 conventions rebuilds every jurisdiction.
@@ -302,7 +347,7 @@ long leaves into pieces. The rules are in `src/nomoscope/derive/segment.py`.
 A segment's `context` is the heading path, the section number and heading,
 and the lead-in text of each enclosing subdivision. `content_sha256`
 hashes the context and the text, so the same text in two jurisdictions
-has the same hash. The limit is set in `[segments]` in the settings file.
+has the same hash. The limit is in the registry's segment settings.
 
 ## The catalog
 

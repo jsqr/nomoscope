@@ -85,3 +85,10 @@ def test_anchor_at_top_of_page():
     ]
     (a,) = bm.anchor(bm.entries(marks), lines, lambda ln: False)
     assert (a.line, a.heading_lines, a.rest) == (0, 2, "")
+
+
+def test_punctuation_left_after_the_title_is_not_text():
+    marks = [mark(0, 0, "Section 10.20.060 [Reserved].", 0, 20.0)]
+    lines = [line(0, 40.0, "10.20.060 [Reserved].")]
+    (a,) = bm.anchor(bm.entries(marks), lines, lambda ln: False)
+    assert a.rest == ""

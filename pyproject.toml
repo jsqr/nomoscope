@@ -25,10 +25,13 @@ infer = [
   "pydantic-ai-slim[mistral]>=2.54.0",
 ]
 
+# ocr run: billed OCR requests.
+ocr = ["mistralai>=3.1"]
+
 [dependency-groups]
 dev = [
   "basedpyright",
-  "nomoscope[infer]",
+  "nomoscope[infer,ocr]",
   "pytest",
   "ruff",
 ]

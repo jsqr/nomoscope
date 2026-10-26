@@ -7,11 +7,10 @@ from typer.testing import CliRunner
 from nomoscope import cli
 from nomoscope.catalog import build as catalog
 from nomoscope.catalog import cite
-from tests import fake
+from tests import census, fake
 from tests.pipeline import P1, P2, P3
 
 pytestmark = pytest.mark.usefixtures("conventions")
-APP = cli.app(fake.REGISTRY, fake.APP)
 J = "us-il-windytown"
 # Section 1-1 replaced by a stub that states its repeal.
 P4 = P3.replace("publication 2025-01-10", "publication 2025-06-01").replace(
@@ -22,7 +21,8 @@ P4 = P3.replace("publication 2025-01-10", "publication 2025-06-01").replace(
 
 
 def invoke(*args):
-    out = CliRunner().invoke(APP, list(args))
+    # Built per call, after the conventions fixture has set the registry.
+    out = CliRunner().invoke(cli.app(fake.REGISTRY, fake.APP), list(args))
     assert out.exit_code == 0, out.output
     return out.output
 
@@ -52,7 +52,8 @@ def law_at(on):
 
 
 @pytest.fixture
-def three(tmp_path):
+def three(cfg, tmp_path):
+    census.write(cfg, tmp_path / "census")
     publish(tmp_path, P1, "p1.txt")
     publish(tmp_path, P2, "p2.txt", "-pcompleteness=partial")
     publish(tmp_path, P3, "p3.txt")
@@ -144,7 +145,7 @@ def test_the_catalog_lists_every_view(three):
             "sessions",
         ]
     )
-    out = CliRunner().invoke(APP, ["sql", "SELECT * FROM nowhere"])
+    out = CliRunner().invoke(cli.app(fake.REGISTRY, fake.APP), ["sql", "SELECT * FROM nowhere"])
     assert out.exit_code == 1 and "nowhere" in out.output
 
 

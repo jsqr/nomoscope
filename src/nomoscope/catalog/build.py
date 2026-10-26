@@ -1,6 +1,7 @@
 """Build the catalog: catalog.duckdb, a file of views over the derived datasets.
 
-There is one view per dataset, plus the views and macros in schema.sql.
+There is one view per dataset, one per reviews table, plus the views and
+macros in schema.sql.
 The catalog holds no data, so it is rebuilt whole after each derive.
 
 The views read parquet files by paths relative to the data root. connect
@@ -15,6 +16,7 @@ from pathlib import Path
 
 import duckdb
 
+from nomoscope.crunch import reviews
 from nomoscope.derive import registry
 from nomoscope.partition import DATA_FILE
 from nomoscope.settings import Settings
@@ -76,6 +78,13 @@ def build(cfg: Settings) -> CatalogResult:
                 f"'{quoted}', hive_partitioning = false, union_by_name = true)"
             )
             views.append(dataset)
+        for table in reviews.TABLES:
+            glob = reviews.table_glob(cfg, table)
+            if glob is None:
+                continue
+            quoted = glob.replace("'", "''")
+            conn.execute(f"CREATE VIEW {table} AS SELECT * FROM read_parquet('{quoted}')")
+            views.append(table)
         if set(NEEDS) <= set(views):
             conn.execute(schema())
             views.append("law_in_force")

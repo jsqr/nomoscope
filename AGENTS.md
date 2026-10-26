@@ -55,16 +55,18 @@ root, and is rebuilt whole.
 
 - A `Registry` of `Source`s and crunchers, passed to `cli.app(registry,
   name)`. A cruncher implements the `Cruncher` protocol, or is a `Carver`,
-  or a `GrammarCruncher` with a reader for its format.
-- In its config root: `crunchers.csv`, `conventions/`,
-  `jurisdictions.csv`, and `grammars/` for a `GrammarCruncher`.
+  or a `GrammarCruncher` with a reader for its format and a directory of
+  grammars.
+- In the same registry: the routes from records to crunchers, the segment
+  settings, and a directory of drafting conventions.
 
 `tests/fake.py` is the smallest example.
 
 ## Paid calls
 
 `grammar infer` sends a page sample to a chat model and is billed per
-token. An agent runs it only with `--dry-run`, which prints the page and
+token. `ocr run` sends every page of a PDF to an OCR model and is billed
+per page. An agent runs these only with `--dry-run`, which prints the page and
 token count, and leaves the paid run to a person. Tests never call a model.
 
 ## The graph store
@@ -73,10 +75,10 @@ Each step records its inputs, code version, and output tables. It reruns
 when it has no row, an input's fingerprint changed, its code version
 changed, or an output file is missing. Each stage module, `Source`, and
 `Carver` has a `VERSION` or `version`. Bump it when the same inputs give
-different output. Config tables are inputs.
+different output. Grammars and conventions are inputs.
 
 Tests must never run a real snarf against a developer's data root. The
-tests use a scratch data root and config root (`tests/conftest.py`).
+tests use a scratch data root (`tests/conftest.py`).
 
 ## Git
 

@@ -6,8 +6,6 @@ from nomoscope.crunch import routes
 from nomoscope.crunch.routes import Route, RouteError
 from nomoscope.graph.records import RecordRow
 
-HEADER = "source,jurisdiction,law_code,cruncher,valid_from\n"
-
 
 def row(source="codifier", jurisdiction="us-il-chicago", code="municipal", on=date(2024, 1, 1)):
     when = datetime(on.year, on.month, on.day, 12, tzinfo=UTC)
@@ -30,8 +28,14 @@ def row(source="codifier", jurisdiction="us-il-chicago", code="municipal", on=da
     )
 
 
-def parsed(*lines):
-    return routes.parse((HEADER + "".join(f"{line}\n" for line in lines)).encode())
+def parsed(*lines: str) -> routes.Routes:
+    """Routes from "source,jurisdiction,law_code,cruncher,valid_from" lines."""
+    found = []
+    for line in lines:
+        source, jurisdiction, code, cruncher, since = line.split(",")
+        valid_from = date.fromisoformat(since) if since else None
+        found.append(Route(source, jurisdiction, code, cruncher, valid_from))
+    return tuple(found)
 
 
 def test_the_most_specific_route_wins():
@@ -66,17 +70,3 @@ def test_a_tie_between_crunchers_is_an_error():
         routes.route(table, row())
     same = (Route("codifier", "*", "*", "a"), Route("codifier", "*", "*", "a"))
     assert routes.route(same, row()) == "a"
-
-
-def test_a_malformed_table_is_refused():
-    with pytest.raises(RouteError, match="names a cruncher"):
-        parsed("codifier,*,*,,")
-    with pytest.raises(RouteError):
-        parsed("codifier,*,*,a,not-a-date")
-
-
-def test_no_config_root_or_table_routes_nothing(tmp_path):
-    from nomoscope.settings import Settings
-
-    assert routes.load(Settings(data_root=tmp_path)) == ()
-    assert routes.load(Settings(data_root=tmp_path, config_root=tmp_path)) == ()

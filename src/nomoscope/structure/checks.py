@@ -10,7 +10,7 @@ from collections import Counter
 
 import polars as pl
 
-from nomoscope.structure import Row, parse, sections
+from nomoscope.structure import Row, documents, parse, sections
 from nomoscope.structure import bookmarks as bm
 from nomoscope.structure import enumerate as en
 from nomoscope.structure import grammar as gr
@@ -40,12 +40,34 @@ def _enum(node: Row) -> en.Enumerator:
     return en.Enumerator(node["style"], node["ordinal"], node["sub"])
 
 
+def uncarved(nodes: list[Row], grammar: gr.Grammar) -> set[str]:
+    """The ids of subdivisions outside every carved section, such as a preface's list.
+
+    The structure checks skip them: nothing of theirs reaches derive.
+    """
+    by_id = {n["id"]: n for n in nodes}
+    divided = {n["parent_id"] for n in nodes if n["kind"] == "division"}
+    out = set()
+    for n in nodes:
+        if n["kind"] != "subdivision":
+            continue
+        owner = n
+        while owner["kind"] == "subdivision":
+            owner = by_id[owner["parent_id"]]
+        if not sections.is_section(owner, grammar, divided):
+            out.add(n["id"])
+    return out
+
+
 def sequence(nodes: list[Row], grammar: gr.Grammar) -> list[Row]:
     """Siblings that do not start at a first value or do not follow in order."""
     modes = {lv.name: lv.sequence for lv in grammar.levels}
     by_id = {n["id"]: n for n in nodes}
+    skipped = uncarved(nodes, grammar)
     groups: dict[tuple[str | None, str], list[Row]] = {}
     for n in nodes:
+        if n["id"] in skipped:
+            continue
         # A bookmark whose title fits no template has no enumerator to follow.
         if n["kind"] != "root" and n["style"] is not None:
             groups.setdefault((parse.scope(n, by_id), n["level"]), []).append(n)
@@ -214,8 +236,9 @@ def depth(nodes: list[Row], grammar: gr.Grammar) -> list[Row]:
     rank = {name: i for i, name in enumerate(subs)}
     by_id = {n["id"]: n for n in nodes}
     out = []
+    skipped = uncarved(nodes, grammar)
     for n in nodes:
-        if n["kind"] != "subdivision" or n["level"] not in rank:
+        if n["kind"] != "subdivision" or n["level"] not in rank or n["id"] in skipped:
             continue
         parent = by_id[n["parent_id"]]
         # A run-in paragraph has no rank among the subdivision levels. Codes
@@ -295,6 +318,80 @@ def unsectioned(nodes: list[Row], grammar: gr.Grammar) -> list[Row]:
     return out
 
 
+def scheme(nodes: list[Row], grammar: gr.Grammar) -> list[Row]:
+    """Sections whose enumerator style at some depth is not the code's most
+    common style at that depth, as "1." at the top where most sections start
+    with "A.".
+
+    Only where levels are named by depth; otherwise `depth` reports these.
+    """
+    if grammar.sections.level_names != "depth":
+        return []
+    by_id = {n["id"]: n for n in nodes}
+    orders: dict[str, dict[int, str]] = {}
+    skipped = uncarved(nodes, grammar)
+    for n in nodes:
+        if n["kind"] != "subdivision" or n["level"] == parse.RUN_IN or n["style"] is None:
+            continue
+        if n["id"] in skipped:
+            continue
+        depth, up = 1, by_id[n["parent_id"]]
+        while up["kind"] == "subdivision":
+            depth += up["level"] != parse.RUN_IN
+            up = by_id[up["parent_id"]]
+        orders.setdefault(up["id"], {}).setdefault(depth, n["style"])
+    at_depth: dict[int, Counter[str]] = {}
+    for found in orders.values():
+        for d, style in found.items():
+            at_depth.setdefault(d, Counter())[style] += 1
+    usual = {d: c.most_common(1)[0][0] for d, c in at_depth.items()}
+    order = " > ".join(usual[d] for d in sorted(usual))
+    out = []
+    for k, found in orders.items():
+        if any(usual[d] != style for d, style in found.items()):
+            chain = " > ".join(found[d] for d in sorted(found))
+            out.append(_row(by_id[k], "scheme", f"{chain}; most sections {order}"))
+    return out
+
+
+def hyphens(lines: list[Row], grammar: gr.Grammar) -> list[Row]:
+    """Words broken at a line end that the document gives no evidence for, so the
+    grammar's `hyphens` default decided whether to keep the hyphen.
+
+    Only where the grammar rejoins broken words.
+    """
+    mode = grammar.sections.hyphens
+    if mode == "keep":
+        return []
+    vocab = documents.vocabulary(lines)
+    text = [(i, line) for i, line in enumerate(lines) if (line.get("text") or "").strip()]
+    out = []
+    for (_, a), (_, b) in itertools.pairwise(text):
+        if parse.running(grammar.skip, a) or parse.running(grammar.skip, b):
+            continue
+        end, start = a["text"].strip(), b["text"].strip()
+        joined = documents.rejoined(end, start, vocab, mode)
+        if joined is not None and joined.guessed:
+            word = documents.BROKEN.search(end)
+            head = documents.CONTINUED.match(start)
+            assert word is not None and head is not None
+            made = f"{joined.text[word.start() :]}{head.group()}"
+            out.append(_row(None, "hyphens", f"guessed {made} (p{b['page'] + 1})"))
+    return out
+
+
+def corrections(lines: list[Row], grammar: gr.Grammar) -> list[Row]:
+    """Corrections that match no line, as when a new edition fixes the print."""
+    out = []
+    for c in grammar.corrections:
+        if not any(
+            line["page"] + 1 == c.page and (line.get("text") or "").strip().startswith(c.printed)
+            for line in lines
+        ):
+            out.append(_row(None, "corrections", f"no line: {c.printed!r} (p{c.page})"))
+    return out
+
+
 def textless(lines: list[Row], pages: int) -> list[Row]:
     """Pages with no lines: blank, or scanned without a text layer."""
     have = {line["page"] for line in lines}
@@ -329,7 +426,10 @@ def run(
         *coverage(nodes, grammar),
         *headings(nodes, grammar),
         *depth(nodes, grammar),
+        *scheme(nodes, grammar),
         *unsectioned(nodes, grammar),
+        *hyphens(lines or [], grammar),
+        *corrections(lines or [], grammar),
     ]
 
 

@@ -65,7 +65,6 @@ CONVENTIONS = conventions.parse({name: tomllib.loads(text) for name, text in FIL
 
 
 def write(directory) -> None:
-    target = directory / conventions.DIR
-    target.mkdir(parents=True, exist_ok=True)
+    directory.mkdir(parents=True, exist_ok=True)
     for name, text in FILES.items():
-        (target / f"{name}.toml").write_text(text)
+        (directory / f"{name}.toml").write_text(text)

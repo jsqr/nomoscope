@@ -22,6 +22,7 @@ import polars as pl
 
 from nomoscope.crunch import routes as routing
 from nomoscope.crunch import schemas as carved_schemas
+from nomoscope.crunch.registry import Registry
 from nomoscope.crunch.routes import Routes
 from nomoscope.derive import conventions as drafting
 from nomoscope.derive import datasets, registry, segment
@@ -47,7 +48,7 @@ def code_version(settings: segment.Settings) -> str:
 
 
 def conventions_input(found: Conventions) -> Input:
-    return Input(CONFIG, drafting.DIR, "", found.fingerprint)
+    return Input(CONFIG, drafting.SCOPE, "", found.fingerprint)
 
 
 @dataclass(frozen=True)
@@ -121,6 +122,7 @@ def added(planned: Planned, state: Staleness, previous: Sequence[Input]) -> list
 def build(
     cfg: Settings,
     store: Store,
+    known: Registry,
     jurisdictions: Iterable[str] | None = None,
     *,
     force: bool = False,
@@ -128,9 +130,9 @@ def build(
     """Build each stale jurisdiction, or only those named. force builds all of them."""
     if not store.exists():
         return []
-    settings = segment.settings(cfg.segments)
-    found = drafting.load(cfg)
-    routes = routing.load(cfg)
+    settings = known.segments
+    found = drafting.load(known.conventions)
+    routes = known.routes
     wanted = set(jurisdictions) if jurisdictions is not None else None
     with store.open(read_only=True) as conn:
         plans = [

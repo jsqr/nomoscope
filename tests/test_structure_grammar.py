@@ -1,5 +1,4 @@
 import tomllib
-from datetime import date
 
 import pytest
 from pydantic import ValidationError
@@ -65,18 +64,17 @@ def test_toml_round_trip():
     assert gr.Grammar.model_validate(tomllib.loads(text)) == GRAMMAR
 
 
-def test_sections_and_review_round_trip():
+def test_sections_round_trip():
     g = GRAMMAR.model_copy(
-        update={
-            "sections": gr.Sections(history=[r"^\(Ord\. "], drop=["^Editor's note"]),
-            "review": gr.Review(
-                status="reviewed", by="jj", on=date(2026, 10, 26), findings={"sequence": 2}
-            ),
-        }
+        update={"sections": gr.Sections(history=[r"^\(Ord\. "], drop=["^Editor's note"])}
     )
-    back = gr.loads(gr.dumps(g))
-    assert back == g
-    assert back.review.reviewed and not GRAMMAR.review.reviewed
+    assert gr.loads(gr.dumps(g)) == g
+
+
+def test_a_review_block_is_rejected():
+    text = gr.dumps(GRAMMAR) + '\n[review]\nstatus = "reviewed"\n'
+    with pytest.raises(ValueError, match="grammar accept"):
+        gr.loads(text)
 
 
 def test_invalid():
@@ -168,3 +166,15 @@ def test_bold_lead_is_a_whole_run():
 def test_form_needs_one_lead():
     with pytest.raises(ValueError):
         gr.Form(form="{n}.")
+
+
+def test_a_level_that_is_not_spaced_needs_its_pieces_to_touch():
+    tight = gr.compile(level(name="sub", kind="subdivision", label="{n}.", style="upper_alpha",
+                             spaced=False))  # fmt: skip
+    assert matched(tight, "A. Permits.").number == "A"
+    assert gr.match(tight, "I . . . do solemnly swear") is None
+    assert matched(gr.compile(level(name="sub", kind="subdivision", label="{n}.",
+                                    style="upper_alpha")), "I . . . do").number == "I"  # fmt: skip
+    section = gr.compile(level(name="section", label="Section {n}.", spaced=False))
+    assert matched(section, "Section  12. Title").number == "12"
+    assert gr.match(section, "Section 12 . Title") is None

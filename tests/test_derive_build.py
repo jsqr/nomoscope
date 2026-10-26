@@ -4,12 +4,12 @@ import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
 
-from nomoscope.crunch import routes
 from nomoscope.derive import build, registry
 from nomoscope.graph import steps
 from nomoscope.graph.steps import DERIVE, StepKey
 from nomoscope.graph.store import Store
 from nomoscope.partition import dataset_path, reference_path
+from tests import census, fake
 from tests.pipeline import P1, P2, P3, crunch, derive, publish
 
 pytestmark = pytest.mark.usefixtures("conventions")
@@ -70,6 +70,7 @@ def test_a_section_is_its_versions_with_their_dates(cfg, tmp_path):
 
 
 def test_the_other_datasets(cfg, tmp_path):
+    census.write(cfg, tmp_path / "census")
     three(cfg, tmp_path)
     derive(cfg)
     pubs = read(cfg, registry.PUBLICATIONS)
@@ -125,7 +126,7 @@ def test_a_changed_publication_refolds(cfg, tmp_path):
     derive(cfg)
     store = Store(cfg)
     with store.open(read_only=True) as conn:
-        [plan] = build.plan(conn, routes.load(cfg))
+        [plan] = build.plan(conn, fake.REGISTRY.routes)
     changed = plan.planned.inputs[0]
     stale = [steps.Input(changed.stage, changed.scope, changed.unit, "0" * 64)]
     assert build.added(plan.planned, steps.Staleness.INPUT, stale) is None
@@ -142,14 +143,16 @@ def test_jurisdictions_build_apart(cfg, tmp_path):
     assert set(elgin["jurisdiction"]) == {"us-il-elgin"}
     assert elgin.height == 2 and read(cfg, registry.LAW_VERSIONS).height == 3
     assert (
-        build.build(cfg, Store(cfg), ["us-il-elgin"], force=True)[0].jurisdiction == "us-il-elgin"
+        build.build(cfg, Store(cfg), fake.REGISTRY, ["us-il-elgin"], force=True)[0].jurisdiction
+        == "us-il-elgin"
     )
 
 
 def test_a_change_to_the_conventions_rebuilds(cfg, tmp_path):
     three(cfg, tmp_path)
     derive(cfg)
-    other = cfg.config_root / "conventions" / "other.toml"
+    assert fake.REGISTRY.conventions is not None
+    other = fake.REGISTRY.conventions / "other.toml"
     other.write_text('[levels]\nwords = ["part"]\n')
     [result] = derive(cfg)
     assert result.mode == "refold"

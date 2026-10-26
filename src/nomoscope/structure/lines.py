@@ -3,7 +3,9 @@
 Fragments near one baseline form a row, split at wide horizontal gaps so
 that most two-column tables of contents stay apart. Fragment widths are
 estimated. Optional OCR blocks supply lines for pages without a text
-layer, and give each line its block type.
+layer, and give each line its block type. A text-layer table, whose
+printed rows mix its columns, is replaced by the rows of its OCR `table`
+block, one line per row in markdown.
 
 Coordinates are PDF points from the top-left corner of the page.
 """
@@ -12,7 +14,7 @@ import re
 
 import polars as pl
 
-from nomoscope.structure import Row
+from nomoscope.structure import Row, tables
 
 # pypdf gives a fragment's origin but not its width; Times averages about
 # half an em per character.
@@ -229,4 +231,63 @@ def build(spans: pl.DataFrame, blocks: pl.DataFrame | None = None) -> pl.DataFra
         ),
     )
     missing = [pl.lit(None).alias(c) for c in SCHEMA if c not in lines.columns]
-    return lines.with_columns(missing).select(SCHEMA.keys()).cast(SCHEMA)
+    built = lines.with_columns(missing).select(SCHEMA.keys()).cast(SCHEMA)
+    return tabled(built, blocks) if blocks is not None and blocks.height else built
+
+
+# A table row starts a paragraph: its gap is this many line heights.
+ROW_GAP = 2.0
+# Rows of one table keep their order between the lines around it.
+ROW_STEP = 0.001
+
+
+def tabled(lines: pl.DataFrame, blocks: pl.DataFrame) -> pl.DataFrame:
+    """Replace the text-layer lines of each OCR table with the table's rows.
+
+    A table continued on the next page is one table; its rows go where its
+    first line was. A table with no text-layer lines (a scanned page) keeps
+    the lines read from its block.
+    """
+    rows = lines.to_dicts()
+    order = blocks.sort("source", "page", "ordinal").to_dicts()
+    drop: set[int] = set()
+    added: list[Row] = []
+    for table in tables.group(order):
+        keys = {(b["source"], b["page"], b["ordinal"]) for b in table}
+        hits = [
+            i
+            for i, r in enumerate(rows)
+            if r["origin"] == "pdf" and (r["source"], r["page"], r["block_ordinal"]) in keys
+        ]
+        found = tables.rows(table)
+        if not hits or not found:
+            continue
+        first = rows[hits[0]]
+        size = first["size"] or 0.0
+        for k, cells in enumerate(found):
+            added.append(
+                {
+                    **{c: None for c in SCHEMA},
+                    "source": first["source"],
+                    "sha256": first["sha256"],
+                    "page": first["page"],
+                    "origin": "table",
+                    "page_width": first["page_width"],
+                    "page_height": first["page_height"],
+                    "x0": first["x0"],
+                    "x1": first["x1"],
+                    "y": first["y"] + k * ROW_STEP,
+                    "size": size,
+                    "gap_before": ROW_GAP * size,
+                    "block_type": "table",
+                    "block_ordinal": first["block_ordinal"],
+                    "text": tables.markdown(cells),
+                    "bold_spans": [],
+                }
+            )
+        drop.update(hits)
+    if not added:
+        return lines
+    kept = [r for i, r in enumerate(rows) if i not in drop]
+    out = pl.DataFrame(kept + added, schema=SCHEMA).sort("source", "page", "y", "x0")
+    return out.with_columns(ordinal=pl.int_range(pl.len()).over("source", "page").cast(pl.Int32))

@@ -108,13 +108,17 @@ def _in_title(word: str, title_words: set[str], abbreviation: str) -> bool:
 
 
 def _rest(text: str, title_words: set[str], abbreviation: str) -> str:
-    """Return `text` after its leading words that also occur in the title."""
+    """Return `text` after its leading words that also occur in the title.
+
+    Punctuation alone, such as the "]." after "[Reserved", is not text.
+    """
     end = 0
     for m in _WORD.finditer(text):
         if not _in_title(m.group().lower(), title_words, abbreviation):
             break
         end = m.end()
-    return text[end:].lstrip(" .:;-").strip()
+    rest = text[end:].lstrip(" .:;-").strip()
+    return rest if _WORD.search(rest) else ""
 
 
 def anchor(found: list[Entry], lines: list[Row], skip: Callable[[Row], bool]) -> list[Anchored]:

@@ -112,7 +112,7 @@ def crunch(
     and runs them even when fresh.
     """
     register(cfg, store, registry)
-    routes = routing.load(cfg)
+    routes = registry.routes
     only = set(units) if units is not None else None
     with store.open(read_only=True) as conn:
         found = plans(cfg, conn, registry, routes, names)

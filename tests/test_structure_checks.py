@@ -3,6 +3,7 @@ import polars as pl
 from nomoscope.structure import checks
 from nomoscope.structure import grammar as gr
 from nomoscope.structure.parse import parse
+from tests.structure import GRAMMAR as PARSE_GRAMMAR
 from tests.structure import RUN_IN, B, lines
 
 GRAMMAR = gr.Grammar(
@@ -163,3 +164,63 @@ def test_counts_and_worse():
         "sequence": 1,
     }
     assert checks.worse({"sequence": 1}, {"sequence": 2}) == {}
+
+
+def test_scheme_reports_sections_off_the_usual_order():
+    g = PARSE_GRAMMAR.model_copy(update={"sections": gr.Sections(level_names="depth")})
+    rows = parse(
+        lines(
+            ("§ 5-1. One.", 72, B), ("A. First.", 72), ("(1) Item.", 96),
+            ("§ 5-2. Two.", 72, B), ("A. First.", 72), ("(1) Item.", 96),
+            ("§ 5-3. Short.", 72, B), ("A. Only.", 72),
+            ("§ 5-4. Odd.", 72, B), ("(a) Sub.", 120), ("(1) Item.", 96),
+        ),
+        g,
+    )  # fmt: skip
+    found = checks.scheme(rows, g)
+    assert [(f["node_id"], f["detail"]) for f in found] == [
+        ("5-4", "lower_alpha > arabic; most sections upper_alpha > arabic")
+    ]
+    assert checks.scheme(rows, PARSE_GRAMMAR) == []
+
+
+def test_lists_outside_carved_sections_are_not_checked():
+    marks = [
+        {"ordinal": 0, "depth": 0, "title": "Preface", "page": 0, "top": 60.0},
+        {"ordinal": 1, "depth": 0, "title": "chapter 5: Fire", "page": 0, "top": 100.0},
+    ]
+    rows = parse(
+        lines(
+            ("PREFACE", 280), ("(2) Second item first.", 96),
+            ("Chapter 5", 280), ("FIRE", 280),
+            ("§ 5-1. Purpose.", 72, B), ("(2) Starts at two.", 96),
+        ),
+        PARSE_GRAMMAR,
+        marks,
+    )  # fmt: skip
+    found = checks.sequence(rows, PARSE_GRAMMAR) + checks.depth(rows, PARSE_GRAMMAR)
+    assert {f["node_id"] for f in found} == {"5/5-1/2"}
+
+
+def test_hyphens_reports_kept_compounds():
+    g = PARSE_GRAMMAR.model_copy(update={"sections": gr.Sections(hyphens="compounds")})
+    near = {"gap_before": 13.0}
+    found = lines(
+        ("§ 5-1. Purpose.", 72, B), ("autho-", 72), ("rized, as authorized, on-", 72, near),
+        ("site.", 72, near),
+    )  # fmt: skip
+    assert [f["detail"] for f in checks.hyphens(found, g)] == ["guessed on-site (p1)"]
+    assert checks.hyphens(found, PARSE_GRAMMAR) == []
+
+
+def test_a_correction_that_matches_no_line():
+    found = lines(("A. First.", 72), ("b. Second.", 72))
+    g = PARSE_GRAMMAR.model_copy(
+        update={
+            "corrections": [
+                gr.Correction(page=1, printed="b. Second.", reads="B. Second."),
+                gr.Correction(page=2, printed="b. Second.", reads="B. Second."),
+            ]
+        }
+    )
+    assert [f["detail"] for f in checks.corrections(found, g)] == ["no line: 'b. Second.' (p2)"]

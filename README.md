@@ -11,8 +11,8 @@ A project that uses nomoscope should supply:
 
 - **Sources and crunchers:** code that fetches a publisher's files and
   turns them into the carved tables, passed to nomoscope in a `Registry`.
-- **Config tables:** which cruncher reads each code, the drafting
-  conventions, and the project's jurisdictions.
+- **In the same registry:** which cruncher reads each code, the segment
+  settings, and the directories of grammars and drafting conventions.
 - **A data root:** a directory outside the repository for the archive and
   the tables.
 
@@ -54,15 +54,15 @@ command reads its settings from the first of `$MYPROJECT_CONFIG`,
 
 ```toml
 data_root = "~/data/myproject"   # required. MYPROJECT_DATA_ROOT overrides it.
-config_root = "config"           # relative to this file
 user_agent = "myproject/0.1 (+mailto:team@example.org)"
 
 [sources.publisher]
 key_env = "PUBLISHER_API_KEY"    # read with Settings.secret("publisher")
-
-[segments]
-limit = 300                      # words, or tokens with unit = "tokens"
 ```
+
+The settings describe the machine. The project's routes, segment
+settings, conventions, and grammars are in its registry; DATA.md
+describes them.
 
 Commands:
 

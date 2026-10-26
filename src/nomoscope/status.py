@@ -10,7 +10,7 @@ from pathlib import Path
 from nomoscope.crunch import routes as routing
 from nomoscope.crunch import runner
 from nomoscope.crunch.registry import Registry
-from nomoscope.derive import build, registry, segment
+from nomoscope.derive import build, registry
 from nomoscope.derive import conventions as drafting
 from nomoscope.graph import records, steps
 from nomoscope.graph.store import Store
@@ -60,7 +60,7 @@ def status(cfg: Settings, known: Registry) -> Status:
             SourceStatus(s, archived.get(s, 0), 0, 0, s in known.sources) for s in names
         )
         return Status(cfg.data_root, sources, (), (), cfg.catalog.is_file())
-    routes = routing.load(cfg)
+    routes = known.routes
     with store.open(read_only=True) as conn:
         rows = records.records(conn)
         source_rows = []
@@ -76,7 +76,7 @@ def status(cfg: Settings, known: Registry) -> Status:
             CruncherStatus(name, states)
             for name, states in sorted(runner.pending(cfg, conn, known, routes).items())
         )
-        plans = build.plan(conn, routes, drafting.load(cfg), segment.settings(cfg.segments))
+        plans = build.plan(conn, routes, drafting.load(known.conventions), known.segments)
         state = steps.classify(cfg, conn, [p.planned for p in plans], check_outputs=False)
         jurisdictions = []
         for p in plans:

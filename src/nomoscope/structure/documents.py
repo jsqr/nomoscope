@@ -7,11 +7,67 @@ its label to the end of its last descendant.
 """
 
 import hashlib
+import itertools
+import re
+from dataclasses import dataclass
 
 from nomoscope.structure import Row
 from nomoscope.structure.parse import starts_paragraph
 
 SECTION = "section"
+WORD = re.compile(r"[A-Za-z]+(?:-[A-Za-z]+)*")
+BROKEN = re.compile(r"([A-Za-z]+)-$")
+CONTINUED = re.compile(r"[a-z]+")
+# The shortest half of a broken word taken as a word of its own.
+WHOLE = 3
+
+
+@dataclass(frozen=True)
+class Vocabulary:
+    """The document's words and hyphenated compounds, in lower case."""
+
+    words: frozenset[str]
+    compounds: frozenset[str]
+
+
+def vocabulary(lines: list[Row]) -> Vocabulary:
+    """The words of `lines`, without the halves of words broken across two lines."""
+    found: list[str] = []
+    broken = False
+    for line in lines:
+        words = WORD.findall(line.get("text") or "")
+        if broken:
+            words = words[1:]
+        broken = bool(BROKEN.search((line.get("text") or "").rstrip()))
+        if broken:
+            words = words[:-1]
+        found.extend(w.lower() for w in words)
+    words = {p for w in found for p in w.split("-")}
+    compounds = {"-".join(pair) for w in found for pair in itertools.pairwise(w.split("-"))}
+    return Vocabulary(frozenset(words), frozenset(compounds))
+
+
+@dataclass(frozen=True)
+class Join:
+    text: str  # the text, ready to take the next piece with no space
+    guessed: bool  # the document had no evidence; the grammar's default decided
+
+
+def rejoined(text: str, piece: str, vocab: Vocabulary, hyphens: str) -> Join | None:
+    """Join `piece` to `text`, if `piece` finishes the word broken at the end of `text`."""
+    tail, head = BROKEN.search(text), CONTINUED.match(piece)
+    if tail is None or head is None:
+        return None
+    first, rest = tail.group(1).lower(), head.group()
+    if first + rest in vocab.words:
+        return Join(text[:-1], False)
+    if f"{first}-{rest}" in vocab.compounds:
+        return Join(text, False)
+    # Two whole words, as "three-" "tiered", make a compound; a syllable seldom is a word.
+    halves = len(first) >= WHOLE and len(rest) >= WHOLE
+    if hyphens == "syllables" and halves and first in vocab.words and rest in vocab.words:
+        return Join(text, True)
+    return Join(text[:-1] if hyphens == "syllables" else text, True)
 
 
 def _owner(node: Row, by_id: dict[str, Row]) -> Row:
@@ -40,9 +96,16 @@ def _separator(line: Row, index: int, previous: int, node: Row) -> str:
     return "\n" if opens or starts_paragraph(line) else " "
 
 
-def build(nodes: list[Row], lines: list[Row]) -> tuple[list[Row], list[Row], list[Row]]:
-    """Return the documents, the subdivision spans, and the source line of each piece of text."""
+def build(
+    nodes: list[Row], lines: list[Row], hyphens: str = "keep"
+) -> tuple[list[Row], list[Row], list[Row]]:
+    """Return the documents, the subdivision spans, and the source line of each piece of text.
+
+    Unless `hyphens` is "keep", a word broken across two lines of one node is
+    joined (see `rejoined`).
+    """
     by_id = {n["id"]: n for n in nodes}
+    vocab = vocabulary(lines) if hyphens != "keep" else None
     owned: dict[str, list[tuple[int, int, str]]] = {}
     for n in nodes:
         doc = _owner(n, by_id)["id"]
@@ -62,7 +125,15 @@ def build(nodes: list[Row], lines: list[Row]) -> tuple[list[Row], list[Row], lis
             end = later[1] if later is not None and later[0] == index else None
             piece = (line.get("text") or "").strip()[start:end].strip()
             if text:
-                text += _separator(line, index, pieces[k - 1][0], by_id[node_id])
+                previous = pieces[k - 1]
+                gap = _separator(line, index, previous[0], by_id[node_id])
+                joined = None
+                if vocab and gap == " " and index != previous[0] and node_id == previous[2]:
+                    joined = rejoined(text, piece, vocab, hyphens)
+                if joined is not None:
+                    back[-1]["end_char"] = len(joined.text)
+                    text, gap = joined.text, ""
+                text += gap
             first, text = len(text), text + piece
             spans.setdefault(node_id, [first, first])[1] = len(text)
             back.append(

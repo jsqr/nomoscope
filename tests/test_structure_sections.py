@@ -170,3 +170,31 @@ def test_unnumbered_divisions_are_not_unsectioned():
     nodes = parse(found, GRAMMAR, marks)
     assert [n["level"] for n in nodes] == ["document", "heading"]
     assert checks.unsectioned(nodes, GRAMMAR) == []
+
+
+TAIL = gr.Sections(
+    history=[r"^\(Ord\. "], history_tail=[r"\s+\(Ord\. [^()]*(?:\([^()]*\)[^()]*)*\)$"]
+)
+
+
+def test_history_at_the_end_of_the_last_paragraph():
+    got = sections.split("A. Seal.\nB. The clerk keeps it.  (Ord. 77-01 (part), 1977)", TAIL)
+    assert got.text == "A. Seal.\nB. The clerk keeps it."
+    assert got.history == "(Ord. 77-01 (part), 1977)"
+    cited = sections.split("A. Under (Ord. 5) the clerk keeps it.", TAIL)
+    assert cited.history is None
+    both = sections.split("Text (Ord. 5) here. (Ord. 6, 1990)", TAIL)
+    assert (both.text, both.history) == ("Text (Ord. 5) here.", "(Ord. 6, 1990)")
+
+
+def test_a_tail_note_shortens_the_last_subdivision():
+    found = lines(
+        ("§ 5-1. Purpose.", 72, B),
+        ("A. First.", 72),
+        ("B. The clerk keeps it.  (Ord. 77-01 (part), 1977)", 72),
+    )
+    g = GRAMMAR.model_copy(update={"sections": TAIL})
+    [section] = sections.carve(parse(found, g), found, g).sections
+    assert section["history"] == "(Ord. 77-01 (part), 1977)"
+    b = next(s for s in section["subdivisions"] if s["path"] == "B")
+    assert section["text"][b["start_char"] : b["end_char"]] == "B. The clerk keeps it."

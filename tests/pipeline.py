@@ -1,6 +1,7 @@
 """Run the fake source through snarf, crunch, and derive."""
 
 from nomoscope.crunch import runner
+from nomoscope.crunch.registry import Registry
 from nomoscope.derive import build, reference
 from nomoscope.graph.store import Store
 from nomoscope.settings import Settings
@@ -63,7 +64,9 @@ def crunch(cfg: Settings) -> None:
     runner.crunch(cfg, Store(cfg), fake.REGISTRY)
 
 
-def derive(cfg: Settings, *, force: bool = False) -> list[build.BuildResult]:
+def derive(
+    cfg: Settings, known: Registry | None = None, *, force: bool = False
+) -> list[build.BuildResult]:
     store = Store(cfg)
     reference.build(cfg, store, force=force)
-    return build.build(cfg, store, force=force)
+    return build.build(cfg, store, known or fake.REGISTRY, force=force)

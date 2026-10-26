@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 from nomoscope import settings
@@ -7,16 +9,11 @@ from tests import fake
 
 @pytest.fixture(autouse=True)
 def scratch_settings(monkeypatch, tmp_path_factory):
-    """Point every test at a scratch data root and config root.
-
-    The config root routes the fake source to its cruncher.
-    """
+    """Point every test at a scratch data root."""
     monkeypatch.delenv(settings.env_data_root(fake.APP), raising=False)
     root = tmp_path_factory.mktemp("settings")
-    (root / "config").mkdir()
-    (root / "config" / "crunchers.csv").write_text(fake.ROUTES)
     path = root / f"{fake.APP}.toml"
-    path.write_text(f'data_root = "{root / "data"}"\nconfig_root = "config"\n')
+    path.write_text(f'data_root = "{root / "data"}"\n')
     monkeypatch.setenv(settings.env_config(fake.APP), str(path))
 
 
@@ -26,7 +23,9 @@ def cfg() -> settings.Settings:
 
 
 @pytest.fixture
-def conventions(cfg):
-    """Write the test conventions to the scratch config root."""
-    drafting.write(cfg.config_root)
+def conventions(tmp_path, monkeypatch):
+    """Write the test conventions to a scratch directory, and give it to the fake registry."""
+    directory = tmp_path / "conventions"
+    drafting.write(directory)
+    monkeypatch.setattr(fake, "REGISTRY", replace(fake.REGISTRY, conventions=directory))
     return drafting.CONVENTIONS

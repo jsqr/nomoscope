@@ -70,16 +70,13 @@ def test_render_marks():
     ]
 
 
-def test_infer_with_a_stub_model_discards_its_review():
-    answer = {**ANSWER, "review": {"status": "reviewed"}}
-
+def test_infer_with_a_stub_model():
     def reply(messages, info):
-        return ModelResponse(parts=[TextPart(json.dumps(answer))])
+        return ModelResponse(parts=[TextPart(json.dumps(ANSWER))])
 
     out = infer.infer(LINES, FunctionModel(reply), "stub", [0, 1])
     assert isinstance(out.grammar, gr.Grammar)
     assert out.grammar.levels[0].label == "§ {n}."
-    assert not out.grammar.review.reviewed
     assert "stub" in infer.comment(out)
 
 

@@ -1,6 +1,6 @@
 import polars as pl
 
-from nomoscope.structure import lines
+from nomoscope.structure import lines, tables
 
 
 def span(page, x, y, text, size=11.0, bold=False):
@@ -106,3 +106,44 @@ def test_unbold():
     )
     assert lines.unbold("**§ 5-1. Purpose.**") == ("§ 5-1. Purpose.", [{"start": 0, "end": 15}])
     assert lines.unbold("*Italic*") == ("Italic", [])
+
+
+def test_an_ocr_table_replaces_its_text_layer_lines():
+    spans = pl.DataFrame(
+        [
+            span(0, 72.0, 100.0, "Before the table."),
+            span(0, 72.0, 130.0, "Use Spaces Home 2"),
+            span(0, 72.0, 144.0, "per unit Shop 4"),
+            span(0, 72.0, 180.0, "After the table."),
+        ]
+    )
+    blocks = pl.DataFrame(
+        {"source": ["a.pdf"] * 2, "sha256": ["s"] * 2, "page": [0, 0], "ordinal": [0, 1],
+         "type": ["text", "table"], "x0": [93, 93], "y0": [120, 160], "x1": [500, 500],
+         "y1": [135, 190], "width": [791] * 2, "height": [1023] * 2, "dpi": [93] * 2,
+         "content": ["Before the table.",
+                     "| Use | Spaces |\n| --- | --- |\n| Home per unit | 2 |\n| Shop | 4 |"]}
+    )  # fmt: skip
+    df = lines.build(spans, blocks)
+    assert df["text"].to_list() == [
+        "Before the table.",
+        "| Use | Spaces |",
+        "| Home per unit | 2 |",
+        "| Shop | 4 |",
+        "After the table.",
+    ]
+    assert df["block_type"].to_list()[1:4] == ["table"] * 3
+    assert df["ordinal"].to_list() == [0, 1, 2, 3, 4]
+    assert all(g >= 22 for g in df["gap_before"].to_list()[1:4])
+
+
+def test_a_table_continued_on_the_next_page_is_one_table():
+    blocks = [
+        {"page": 0, "ordinal": 0, "type": "text", "content": "x"},
+        {"page": 0, "ordinal": 1, "type": "table", "content": "| A | B |\n|---|---|\n| 1 | 2 |"},
+        {"page": 0, "ordinal": 2, "type": "footer", "content": "p1"},
+        {"page": 1, "ordinal": 0, "type": "header", "content": "h"},
+        {"page": 1, "ordinal": 1, "type": "table", "content": "| A | B |\n|---|---|\n| 3 | 4 |"},
+    ]
+    [table] = tables.group(blocks)
+    assert tables.rows(table) == [["A", "B"], ["1", "2"], ["3", "4"]]

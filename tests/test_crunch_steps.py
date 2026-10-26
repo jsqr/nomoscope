@@ -1,7 +1,7 @@
 """Crunchers with a snapshot step, records with every code, and route changes."""
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 
 import polars as pl
@@ -9,6 +9,7 @@ import polars as pl
 from nomoscope.crunch import runner, schemas
 from nomoscope.crunch.registry import Registry
 from nomoscope.crunch.results import CrunchResult
+from nomoscope.crunch.routes import ANY, Route
 from nomoscope.derive import registry as datasets
 from nomoscope.graph import steps
 from nomoscope.graph.records import RecordRow
@@ -73,8 +74,11 @@ def text_date(cfg: Settings, row: RecordRow) -> str:
     return blob_store(cfg).read(item.sha256).decode().splitlines()[0]
 
 
-STATE_REGISTRY = Registry(sources={"state": STATE}, crunchers={"staged": Staged()})
-ROUTES = "source,jurisdiction,law_code,cruncher,valid_from\nstate,us-ca,*,staged,\n"
+STATE_REGISTRY = Registry(
+    sources={"state": STATE},
+    crunchers={"staged": Staged()},
+    routes=(Route("state", "us-ca", ANY, "staged"),),
+)
 
 
 def dump(cfg, tmp_path, name, text):
@@ -90,14 +94,13 @@ def read(cfg, dataset, j="us-ca"):
 
 
 def test_a_snapshot_step_runs_before_the_carve_and_one_record_carries_two_codes(cfg, tmp_path):
-    (cfg.config_root / "crunchers.csv").write_text(ROUTES)
     first = dump(cfg, tmp_path, "a.txt", "2024-01-01\nGOV|1.|Text one.\nPEN|1.|Text two.\n")
     store = Store(cfg)
     results = runner.crunch(cfg, store, STATE_REGISTRY)
     assert [(r.stage, r.unit) for r in results] == [("crunch", first.id), ("carve", first.id)]
     dump(cfg, tmp_path, "b.txt", "2024-06-01\nGOV|1.|Text one.\n")
     assert [r.stage for r in runner.crunch(cfg, store, STATE_REGISTRY)] == ["crunch", "carve"]
-    derive(cfg)
+    derive(cfg, STATE_REGISTRY)
     versions = read(cfg, datasets.LAW_VERSIONS)
     assert sorted(versions["law_code"]) == ["GOV", "PEN"]
     # The second dump is a full publication of GOV only, so PEN is not absent.
@@ -112,16 +115,17 @@ def test_a_snapshot_step_runs_before_the_carve_and_one_record_carries_two_codes(
 
 
 def test_a_route_change_reruns_only_what_it_moves(cfg, tmp_path, conventions):
-    two = Registry(
-        sources=fake.REGISTRY.sources,
+    two = replace(
+        fake.REGISTRY,
         crunchers={"fake": fake.CRUNCHER, "other": runner.Carver(fake.carve, "1")},
     )
     publish(cfg, tmp_path, P1, "a.txt")
     elgin = publish(cfg, tmp_path, P3, "b.txt", jurisdiction="us-il-elgin")
     store = Store(cfg)
     runner.crunch(cfg, store, two)
-    derive(cfg)
-    (cfg.config_root / "crunchers.csv").write_text(fake.ROUTES + "fake,us-il-elgin,*,other,\n")
+    derive(cfg, two)
+    moved_routes = (*two.routes, Route("fake", "us-il-elgin", ANY, "other"))
+    two = replace(two, routes=moved_routes)
     moved = runner.crunch(cfg, store, two)
     assert [(r.cruncher, r.unit) for r in moved] == [("other", elgin.id)]
-    assert [r.jurisdiction for r in derive(cfg)] == ["us-il-elgin"]
+    assert [r.jurisdiction for r in derive(cfg, two)] == ["us-il-elgin"]

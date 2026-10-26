@@ -20,6 +20,7 @@ import polars as pl
 
 from nomoscope.crunch import schemas
 from nomoscope.crunch.registry import Registry
+from nomoscope.crunch.routes import ANY, Route
 from nomoscope.crunch.runner import Carver
 from nomoscope.graph.records import RecordRow
 from nomoscope.settings import Settings
@@ -32,7 +33,6 @@ SOURCE_ID = "fake"
 DRAFTING = "fake"
 CODE = Feed("code", ("",), "none", days=(), completeness="full")
 SOURCE = Source(SOURCE_ID, (CODE,), (), lambda d: {})
-ROUTES = "source,jurisdiction,law_code,cruncher,valid_from\nfake,*,*,fake,\n"
 
 
 def carve(cfg: Settings, row: RecordRow, record: archive.Record) -> Mapping[str, pl.DataFrame]:
@@ -102,7 +102,11 @@ def carve(cfg: Settings, row: RecordRow, record: archive.Record) -> Mapping[str,
 
 
 CRUNCHER = Carver(carve, "1")
-REGISTRY = Registry(sources={SOURCE_ID: SOURCE}, crunchers={SOURCE_ID: CRUNCHER})
+REGISTRY = Registry(
+    sources={SOURCE_ID: SOURCE},
+    crunchers={SOURCE_ID: CRUNCHER},
+    routes=(Route(SOURCE_ID, ANY, ANY, SOURCE_ID),),
+)
 
 
 def parse(text: str) -> tuple[schemas.Stated, list[dict], list[dict]]:
