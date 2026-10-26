@@ -1,5 +1,6 @@
 import json
 from datetime import date
+from pathlib import Path
 
 import polars as pl
 import pytest
@@ -44,7 +45,7 @@ RULES = gr.Sections(history=[r"^\(Ord\. "], drop=[r"^Editor's note"])
 def read(cfg: Settings, record: archive.Record) -> Document:
     [item] = record.items()
     rows = json.loads(blob_store(cfg).read(item.sha256))
-    found = [{**line, "sha256": item.sha256} for line in lines(*rows)]
+    found = [{**line, "source": item.name, "sha256": item.sha256} for line in lines(*rows)]
     return Document(found, pages=1)
 
 
@@ -228,3 +229,15 @@ def test_grammar_infer_writes_a_draft(cfg, record, monkeypatch):
         cli.app(REGISTRY, fake.APP), ["grammar", "infer", fake.SOURCE_ID, record.id]
     )
     assert again.exit_code == 1 and "exists" in again.output
+
+
+def test_grammar_review_writes_a_page_beside_its_source(cfg, record):
+    write_grammar(cfg)
+    out = invoke("grammar", "review", fake.SOURCE_ID, record.id)
+    page = Path(out.strip())
+    assert page == cfg.data_root / "review" / fake.SOURCE_ID / record.id / "index.html"
+    text = page.read_text()
+    assert 'href="code.json#page=1">section 0 p1</a>' in text
+    assert "Permits are required." in text
+    [linked] = [p for p in page.parent.iterdir() if p.is_symlink()]
+    assert linked.read_bytes().startswith(b"[")

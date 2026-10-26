@@ -1,4 +1,4 @@
-"""The grammar commands: sample, infer, and check.
+"""The grammar commands: sample, infer, check, and review.
 
 `grammar infer` makes a billed request.
 """
@@ -14,12 +14,14 @@ from nomoscope.crunch import grammared
 from nomoscope.crunch.registry import Registry
 from nomoscope.errors import NomoscopeError
 from nomoscope.graph.store import Store
+from nomoscope.snarf.run import blob_store
+from nomoscope.structure import checks, review, sample
 from nomoscope.structure import grammar as gr
 from nomoscope.structure import lines as linelib
-from nomoscope.structure import sample
 
 Source = Annotated[str, typer.Argument(help="Source id")]
 RecordId = Annotated[str, typer.Argument(help="Record id")]
+REVIEW = "review"
 
 
 def add(app: typer.Typer, registry: Registry, name: str) -> None:
@@ -78,6 +80,52 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         except (NomoscopeError, ValueError) as e:
             raise fail(str(e)) from e
         report(checked, limit)
+
+    @group.command("review")
+    def review_(
+        source: Source,
+        record: RecordId,
+        grammar: Annotated[
+            Path | None, typer.Option(help="Grammar file; default the record's own")
+        ] = None,
+        out: Annotated[
+            Path | None, typer.Option(help="Directory; default review/<source>/<record>/")
+        ] = None,
+    ) -> None:
+        """Write the record's parse as an HTML page, beside a link to its source file."""
+        cfg = load_settings(name)
+        try:
+            cruncher, row, found = grammared.resolve(cfg, Store(cfg), registry, source, record)
+            path = grammar or grammared.grammar_path(cfg, row)
+            g = gr.load(grammar) if grammar else grammared.load_grammar(cfg, row)
+            doc = cruncher.read(cfg, found)
+        except (NomoscopeError, ValueError) as e:
+            raise fail(str(e)) from e
+        nodes, findings = grammared.parsed(g, doc)
+        a = grammared.admission(g, checks.counts(findings))
+        target = out or cfg.data_root / REVIEW / source / record
+        target.mkdir(parents=True, exist_ok=True)
+        href = None
+        first = doc.lines[0] if doc.lines else {}
+        if first.get("source") and first.get("sha256"):
+            href = Path(first["source"]).name
+            link = target / href
+            link.unlink(missing_ok=True)
+            link.symlink_to(blob_store(cfg).path(first["sha256"]))
+        held = "admitted" if a["admitted"] else f"held (worse {a['worse']})"
+        header = [
+            ("record", record),
+            ("source", source),
+            ("jurisdiction", row.jurisdiction),
+            ("code", row.code),
+            ("grammar", str(path)),
+            ("review", str(a["review"])),
+            ("findings", str(a["findings"] or "none")),
+            ("derive", held),
+        ]
+        page = review.render(nodes, doc.lines, g, findings, header, href if doc.pages else None)
+        (target / "index.html").write_text(page, encoding="utf-8")
+        typer.echo(target / "index.html")
 
     @group.command("infer")
     def infer_(
