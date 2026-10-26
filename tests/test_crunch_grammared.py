@@ -269,7 +269,7 @@ def test_grammar_review_writes_a_page_beside_its_source(cfg, record):
     write_grammar(cfg)
     out = invoke("grammar", "review", fake.SOURCE_ID, record.id)
     page = Path(out.strip())
-    assert page == cfg.data_root / "review" / fake.SOURCE_ID / record.id / "index.html"
+    assert page == cfg.data_root / "review-pages" / fake.SOURCE_ID / record.id / "index.html"
     text = page.read_text()
     assert 'href="code.json#page=1">section 0 p1</a>' in text
     assert "Permits are required." in text

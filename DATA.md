@@ -16,7 +16,7 @@ $data_root/
   derived/             tables in the shared layout
   staging/             downloads in progress
   reviews/             acceptances of parsed codes, from `grammar accept`
-  review/              HTML views of parsed codes, from `grammar review`
+  review-pages/        HTML views of parsed codes, from `grammar review`
   graph.duckdb         the graph store
   catalog.duckdb       views over derived/ and reviews/
 ```
@@ -24,7 +24,7 @@ $data_root/
 Each tier can be rebuilt from the one before it. The archive cannot be
 rebuilt, because a source may stop serving a file. `reviews/` cannot be
 rebuilt either, because it records people's decisions. `staging/` and
-`review/` are safe to delete.
+`review-pages/` are safe to delete.
 
 The graph store records each step's inputs, code version, and output
 tables. A step reruns when one of these changes or an output file is
@@ -161,7 +161,7 @@ lists the sections that changed, and `status` counts held tabulations.
 prints a record's lines for drafting a grammar, and `grammar infer`
 drafts one with a chat model (billed; the `infer` extra). `grammar check`
 parses a record with a grammar and writes nothing. `grammar review` writes
-the parse as an HTML page at `review/<source>/<record>/index.html`, beside a
+the parse as an HTML page at `review-pages/<source>/<record>/index.html`, beside a
 link to the source file: each division and subdivision is badged with its
 level, its offset from the section level (section 0, chapter -1,
 subsection +1), and its pages, which link into a PDF source.

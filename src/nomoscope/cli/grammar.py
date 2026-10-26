@@ -26,7 +26,7 @@ from nomoscope.structure import lines as linelib
 
 Source = Annotated[str, typer.Argument(help="Source id")]
 RecordId = Annotated[str, typer.Argument(help="Record id")]
-REVIEW = "review"
+REVIEW_PAGES = "review-pages"
 
 
 def add(app: typer.Typer, registry: Registry, name: str) -> None:
@@ -95,7 +95,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
             Path | None, typer.Option(help="Grammar file; default the record's own")
         ] = None,
         out: Annotated[
-            Path | None, typer.Option(help="Directory; default review/<source>/<record>/")
+            Path | None, typer.Option(help="Directory; default review-pages/<source>/<record>/")
         ] = None,
     ) -> None:
         """Write the record's parse as an HTML page, beside a link to its source file."""
@@ -112,7 +112,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         review_row, accepted = grammared.in_force(cfg, row)
         changes = grammared.since_review(review_row, accepted, record, tabulated)
         a = grammared.admission(review_row, checks.counts(findings), changes)
-        target = out or cfg.data_root / REVIEW / source / record
+        target = out or cfg.data_root / REVIEW_PAGES / source / record
         target.mkdir(parents=True, exist_ok=True)
         href = None
         first = doc.lines[0] if doc.lines else {}
