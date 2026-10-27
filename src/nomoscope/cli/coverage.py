@@ -110,6 +110,61 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         entry = coverage.change(cfg, jurisdiction, publisher=publisher, url=url, note=note)
         written(cfg, entry, by)
 
+    @group.command("match")
+    def match(
+        dry_run: Annotated[bool, typer.Option(help="Print the matches; write nothing")] = False,
+        by: By = None,
+    ) -> None:
+        """Fill in publishers and URLs from the project's listings.
+
+        A listed jurisdiction that already has a publisher is left alone. A
+        jurisdiction with one listing of its state, name, and kind gets it; the
+        rest are printed to settle with `coverage set`.
+        """
+        cfg = load_settings(name)
+        if registry.listings is None:
+            raise fail("the project gives no listings")
+        path = reference_path(cfg, datasets.JURISDICTIONS)
+        if not path.is_file():
+            raise fail("no jurisdictions table; fetch the Census files and run derive")
+        try:
+            found = registry.listings(cfg)
+        except NomoscopeError as e:
+            raise fail(str(e)) from e
+        listed = coverage.in_force(cfg)
+        open_ = listed.filter(pl.col("publisher").is_null())["jurisdiction"]
+        notes = dict(zip(listed["jurisdiction"], listed["note"], strict=True))
+        matches = coverage.match(found, pl.read_parquet(path), open_)
+        # The listed row's note is kept, so the row in force still carries it.
+        entries = [
+            coverage.Entry(
+                j,
+                publisher=listing.publisher,
+                url=listing.url,
+                note="; ".join(
+                    n for n in (notes[j], f"matched {listing.name!r} in {listing.record}") if n
+                ),
+            )
+            for j, listing in matches.exact
+        ]
+        for e in entries:
+            typer.echo(f"{e.jurisdiction:40} {e.publisher:16} {e.url}")
+        for j, candidates in matches.ambiguous:
+            choices = "; ".join(f"{c.name} ({c.publisher} {c.url})" for c in candidates)
+            typer.echo(f"{j:40} ambiguous: {choices}")
+        typer.echo(
+            f"{len(found)} listings; {len(entries)} matched, {len(matches.ambiguous)} ambiguous, "
+            f"{len(open_) - len(entries) - len(matches.ambiguous)} without a listing",
+            err=True,
+        )
+        if dry_run or not entries:
+            return
+        try:
+            coverage.write(cfg, entries, by or getpass.getuser())
+        except NomoscopeError as e:
+            raise fail(str(e)) from e
+        catalog.build(cfg)
+
     @group.command("remove")
     def remove(jurisdiction: Jurisdiction, by: By = None, note: Note = None) -> None:
         """Take a jurisdiction off the list. Its publisher and URL are kept."""

@@ -1,18 +1,19 @@
 """The registry: a project's sources and crunchers, by name, and what else
 nomoscope needs to know about the project: the routes from records to
-crunchers, the segment settings derive uses, and the directory of drafting
-conventions.
+crunchers, the segment settings derive uses, the directory of drafting
+conventions, and a reader of publishers' listings for `coverage match`.
 
 A cruncher plans and runs steps over the records routed to it. For each
 record it tabulates, it must write a tabulate step keyed (tabulate, <cruncher>,
 <record>) with runner.write_tabulated. Derive reads only those steps.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from nomoscope.coverage import Listing
 from nomoscope.crunch import CrunchError
 from nomoscope.crunch.results import CrunchResult
 from nomoscope.crunch.routes import Routes
@@ -54,6 +55,7 @@ class Registry:
     routes: Routes = ()
     segments: SegmentSettings = DEFAULT_SEGMENTS
     conventions: Path | None = None
+    listings: Callable[[Settings], list[Listing]] | None = None
 
     def source(self, source_id: str) -> Source:
         try:

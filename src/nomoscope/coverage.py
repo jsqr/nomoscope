@@ -8,10 +8,15 @@ force, so the table keeps every change.
 
 A publisher is a source id when the project has a source for it, and
 otherwise a name.
+
+A project may also give listings: the codes a publisher's library lists,
+by state and name. `match` pairs them with listed jurisdictions by state,
+name, and kind.
 """
 
-from collections import Counter
-from collections.abc import Sequence
+import re
+from collections import Counter, defaultdict
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -142,3 +147,100 @@ def write(cfg: Settings, entries: Sequence[Entry], by: str, at: datetime | None 
     )
     write_parquet(frame, path)
     return path
+
+
+@dataclass(frozen=True)
+class Listing:
+    """A code a publisher's library lists."""
+
+    state: str  # postal code, lowercase
+    name: str  # as the library writes it: "City of Austin", "Austin, TX"
+    publisher: str
+    url: str
+    record: str  # the archive record it was read from
+    kind: str | None = None  # when the library gives it apart from the name
+
+
+@dataclass(frozen=True)
+class Matches:
+    exact: list[tuple[str, Listing]]
+    # A jurisdiction with several listings, or a listing that fits several jurisdictions.
+    ambiguous: list[tuple[str, list[Listing]]]
+
+
+KINDS = (
+    "city and county",
+    "city and borough",
+    "consolidated government",
+    "metropolitan government",
+    "unified government",
+    "charter township",
+    "municipality",
+    "township",
+    "borough",
+    "village",
+    "county",
+    "parish",
+    "city",
+    "town",
+)
+_KIND = "|".join(KINDS)
+LEADING_KIND = re.compile(rf"^(?:the\s+)?({_KIND})\s+of\s+(.+)$", re.IGNORECASE)
+TRAILING_KIND = re.compile(rf"^(.+?)\s+({_KIND})$", re.IGNORECASE)
+STATE_SUFFIX = re.compile(r",\s*[A-Za-z. ]+$")
+
+
+def readings(name: str) -> list[tuple[str, str | None]]:
+    """A listed name's possible place names and kinds, lowercased.
+
+    "Town of Hunter" is ("hunter", "town"). A trailing kind may be part of
+    the name, so "Oklahoma City" is both ("oklahoma", "city") and
+    ("oklahoma city", None).
+    """
+    text = STATE_SUFFIX.sub("", " ".join(name.split()))
+    if m := LEADING_KIND.match(text):
+        return [(m[2].lower(), m[1].lower())]
+    if m := TRAILING_KIND.match(text):
+        return [(m[1].lower(), m[2].lower()), (text.lower(), None)]
+    return [(text.lower(), None)]
+
+
+def kinds_agree(listed: str | None, census: str) -> bool:
+    """A listing without a kind fits any; "city and county" fits a county or a city."""
+    return listed is None or bool(set(listed.split()) & set(census.split()) - {"and"})
+
+
+def match(
+    listings: Iterable[Listing], jurisdictions: pl.DataFrame, listed: Iterable[str]
+) -> Matches:
+    """Pair listings with the listed jurisdictions of the same state, name, and kind.
+
+    jurisdictions has the reference table's id, name, and kind columns.
+    """
+    wanted = set(listed)
+    by_name: dict[tuple[str, str], list[tuple[str, str]]] = defaultdict(list)
+    for r in jurisdictions.filter(pl.col("id").is_in(wanted)).iter_rows(named=True):
+        state = r["id"].split("-")[1]
+        by_name[(state, r["name"].lower())].append((r["id"], r["kind"]))
+    found: dict[str, list[Listing]] = defaultdict(list)
+    fits: dict[Listing, list[str]] = {}
+    for listing in listings:
+        ids = list(
+            dict.fromkeys(
+                j
+                for place, kind in readings(listing.name)
+                for j, k in by_name.get((listing.state, place), [])
+                if kinds_agree(listing.kind or kind, k)
+            )
+        )
+        fits[listing] = ids
+        for j in ids:
+            found[j].append(listing)
+    exact, ambiguous = [], []
+    for j in sorted(found):
+        candidates = found[j]
+        if len(candidates) == 1 and len(fits[candidates[0]]) == 1:
+            exact.append((j, candidates[0]))
+        else:
+            ambiguous.append((j, candidates))
+    return Matches(exact, ambiguous)

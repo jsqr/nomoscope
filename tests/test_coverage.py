@@ -1,5 +1,7 @@
+from dataclasses import replace
 from datetime import UTC, datetime
 
+import polars as pl
 import pytest
 from typer.testing import CliRunner
 
@@ -96,3 +98,129 @@ def test_the_catalog_view_holds_the_rows_in_force(cfg):
 def test_without_rows_the_catalog_has_no_coverage_view(cfg):
     cfg.data_root.mkdir(parents=True)
     assert coverage.COVERAGE not in catalog.build(cfg).views
+
+
+JURISDICTIONS = pl.DataFrame(
+    {
+        "id": [
+            "us-ny-rochester_city",
+            "us-ny-hunter_town",
+            "us-ny-hunter_village",
+            "us-hi-honolulu_county",
+            "us-va-arlington_county",
+        ],
+        "name": ["Rochester", "Hunter", "Hunter", "Honolulu", "Arlington"],
+        "kind": ["city", "town", "village", "county", "county"],
+    }
+)
+
+
+def listing(state: str, name: str, publisher: str = "pub") -> coverage.Listing:
+    return coverage.Listing(state, name, publisher, f"https://x/{name}", "r1")
+
+
+def test_a_listed_name_gives_place_and_kind():
+    assert coverage.readings("Town of  Hunter") == [("hunter", "town")]
+    assert coverage.readings("City and County of Honolulu") == [("honolulu", "city and county")]
+    assert coverage.readings("Arlington County") == [
+        ("arlington", "county"),
+        ("arlington county", None),
+    ]
+    assert coverage.readings("Austin, TX") == [("austin", None)]
+    assert coverage.readings("Winston-Salem") == [("winston-salem", None)]
+
+
+def test_a_trailing_kind_may_be_part_of_the_name():
+    jurisdictions = pl.DataFrame(
+        {"id": ["us-ok-oklahoma_city"], "name": ["Oklahoma City"], "kind": ["city"]}
+    )
+    found = coverage.match(
+        [coverage.Listing("ok", "Oklahoma City", "pub", "https://x/okc", "r1", kind="city")],
+        jurisdictions,
+        ["us-ok-oklahoma_city"],
+    )
+    assert [j for j, _ in found.exact] == ["us-ok-oklahoma_city"]
+
+
+def test_the_kind_tells_a_city_from_a_town_of_the_same_name():
+    found = coverage.match(
+        [listing("ny", "City of Rochester"), listing("ny", "Town of Rochester")],
+        JURISDICTIONS,
+        ["us-ny-rochester_city"],
+    )
+    assert [(j, x.name) for j, x in found.exact] == [("us-ny-rochester_city", "City of Rochester")]
+    assert found.ambiguous == []
+
+
+def test_a_kind_shared_by_name_fits_a_consolidated_government():
+    found = coverage.match(
+        [listing("hi", "City and County of Honolulu"), listing("va", "Arlington County")],
+        JURISDICTIONS,
+        ["us-hi-honolulu_county", "us-va-arlington_county"],
+    )
+    assert [j for j, _ in found.exact] == ["us-hi-honolulu_county", "us-va-arlington_county"]
+
+
+def test_a_kind_given_apart_from_the_name_is_used():
+    hunter = coverage.Listing("ny", "Hunter", "pub", "https://x/hunter", "r1", kind="village")
+    found = coverage.match([hunter], JURISDICTIONS, ["us-ny-hunter_town", "us-ny-hunter_village"])
+    assert [j for j, _ in found.exact] == ["us-ny-hunter_village"]
+
+
+def test_a_listing_without_a_kind_that_fits_two_is_ambiguous():
+    found = coverage.match(
+        [listing("ny", "Hunter, NY")], JURISDICTIONS, ["us-ny-hunter_town", "us-ny-hunter_village"]
+    )
+    assert found.exact == []
+    assert [j for j, _ in found.ambiguous] == ["us-ny-hunter_town", "us-ny-hunter_village"]
+
+
+def test_two_publishers_for_one_jurisdiction_are_ambiguous():
+    found = coverage.match(
+        [listing("ny", "Town of Hunter", "a"), listing("ny", "Hunter, NY", "b")],
+        JURISDICTIONS,
+        ["us-ny-hunter_town"],
+    )
+    assert found.exact == []
+    [(j, candidates)] = found.ambiguous
+    assert j == "us-ny-hunter_town" and [c.publisher for c in candidates] == ["a", "b"]
+
+
+def test_only_listed_jurisdictions_are_matched():
+    found = coverage.match([listing("ny", "Town of Hunter")], JURISDICTIONS, [])
+    assert found.exact == [] and found.ambiguous == []
+
+
+@pytest.mark.usefixtures("jurisdictions")
+def test_match_writes_exact_matches_and_leaves_publishers_set_by_hand(cfg, monkeypatch):
+    listings = [
+        coverage.Listing("il", "City of Elgin", "pub", "https://x/elgin", "r1"),
+        coverage.Listing("il", "City of Chicago", "pub", "https://x/chicago", "r1"),
+        coverage.Listing("ny", "Hunter", "pub", "https://x/hunter", "r1"),
+    ]
+    monkeypatch.setattr(fake, "REGISTRY", replace(fake.REGISTRY, listings=lambda cfg: listings))
+    coverage.write(
+        cfg,
+        [
+            coverage.Entry("us-il-elgin", note="on the list"),
+            coverage.Entry("us-il-chicago", publisher="mine", url="https://mine"),
+            coverage.Entry("us-ny-hunter_town"),
+            coverage.Entry("us-ny-hunter_village"),
+        ],
+        "jj",
+        at(1),
+    )
+    out = invoke("coverage", "match", "--dry-run")
+    assert "us-ny-hunter_town" in out and "ambiguous" in out
+    assert coverage.rows(cfg).height == 4
+    invoke("coverage", "match")
+    found = {r["jurisdiction"]: r for r in coverage.in_force(cfg).iter_rows(named=True)}
+    assert found["us-il-elgin"]["url"] == "https://x/elgin"
+    assert found["us-il-elgin"]["note"] == "on the list; matched 'City of Elgin' in r1"
+    assert found["us-il-chicago"]["url"] == "https://mine"
+    assert found["us-ny-hunter_town"]["url"] is None
+
+
+def test_match_needs_the_project_to_give_listings(cfg):
+    out = CliRunner().invoke(cli.app(fake.REGISTRY, fake.APP), ["coverage", "match"])
+    assert out.exit_code == 1 and "gives no listings" in out.output

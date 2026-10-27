@@ -53,6 +53,19 @@ jurisdictions listed, with the first and latest fetch of each one's code,
 read from the archive. In Python, `nomoscope.coverage.write(settings,
 entries, by)` writes many rows as one file.
 
+A project can give listings, the codes its publishers' libraries list,
+as `Registry.listings`: a function from settings to
+`nomoscope.coverage.Listing` values, each with a state, the name as the
+library writes it, a publisher, a URL, and the archive record it came
+from. `coverage match` pairs them with listed jurisdictions that have no
+publisher yet. A listing fits a jurisdiction of its state when its name,
+with a kind such as "City of" or "County" and a trailing ", ST" removed,
+is the jurisdiction's Census name, and its kind, if the name or the
+listing gives one, shares a word with the Census kind. A jurisdiction with exactly one fitting
+listing, which fits no other, gets that listing's publisher and URL. The
+others are printed to settle with `coverage set`. `--dry-run` writes
+nothing.
+
 ## The project's registry
 
 The settings file describes the machine: where the data root is, the user
