@@ -1,7 +1,7 @@
 """Build the catalog: catalog.duckdb, a file of views over the derived datasets.
 
-There is one view per dataset, one per reviews table, plus the views and
-macros in schema.sql.
+There is one view per dataset, one per reviews table, one of the coverage
+rows in force, plus the views and macros in schema.sql.
 The catalog holds no data, so it is rebuilt whole after each derive.
 
 The views read parquet files by paths relative to the data root. connect
@@ -16,6 +16,7 @@ from pathlib import Path
 
 import duckdb
 
+from nomoscope import coverage
 from nomoscope.crunch import reviews
 from nomoscope.derive import registry
 from nomoscope.partition import DATA_FILE
@@ -85,6 +86,15 @@ def build(cfg: Settings) -> CatalogResult:
             quoted = glob.replace("'", "''")
             conn.execute(f"CREATE VIEW {table} AS SELECT * FROM read_parquet('{quoted}')")
             views.append(table)
+        glob = coverage.table_glob(cfg)
+        if glob is not None:
+            quoted = glob.replace("'", "''")
+            conn.execute(
+                f"CREATE VIEW {coverage.COVERAGE} AS SELECT * EXCLUDE (listed) FROM ("
+                f"SELECT * FROM read_parquet('{quoted}') QUALIFY row_number() OVER "
+                "(PARTITION BY jurisdiction ORDER BY written_at DESC) = 1) WHERE listed"
+            )
+            views.append(coverage.COVERAGE)
         if set(NEEDS) <= set(views):
             conn.execute(schema())
             views.append("law_in_force")

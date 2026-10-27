@@ -16,19 +16,42 @@ $data_root/
   derived/             tables in the shared layout
   staging/             downloads in progress
   reviews/             acceptances of parsed codes, from `grammar accept`
+  coverage/            the jurisdictions the project covers, from `coverage`
   review-pages/        HTML views of parsed codes, from `grammar review`
   graph.duckdb         the graph store
-  catalog.duckdb       views over derived/ and reviews/
+  catalog.duckdb       views over derived/, reviews/, and coverage/
 ```
 
 Each tier can be rebuilt from the one before it. The archive cannot be
-rebuilt, because a source may stop serving a file. `reviews/` cannot be
-rebuilt either, because it records people's decisions. `staging/` and
+rebuilt, because a source may stop serving a file. `reviews/` and
+`coverage/` cannot be rebuilt either, because they record people's
+decisions. `staging/` and
 `review-pages/` are safe to delete.
 
 The graph store records each step's inputs, code version, and output
 tables. A step reruns when one of these changes or an output file is
 missing. `status` summarizes the store. `graph show` lists every step.
+
+### Coverage
+
+`coverage/` lists the jurisdictions the project collects codes for. Each
+row gives a jurisdiction, whether it is listed or removed, its code's
+publisher and URL, who wrote the row and when, and a note. A publisher is
+a source id when the project has a source for it, and otherwise a name.
+Files are only added. The latest row of a jurisdiction is the one in
+force, so the table keeps every change.
+
+```
+myproject coverage set us-il-chicago --publisher example --url https://example.org/chicago
+myproject coverage remove us-il-chicago --note "code withdrawn"
+myproject coverage --state il
+```
+
+`coverage set` refuses a jurisdiction that is not in the jurisdictions
+table, and keeps the values it is not given. `coverage` prints the
+jurisdictions listed, with the first and latest fetch of each one's code,
+read from the archive. In Python, `nomoscope.coverage.write(settings,
+entries, by)` writes many rows as one file.
 
 ## The project's registry
 
@@ -359,7 +382,8 @@ has the same hash. The limit is in the registry's segment settings.
 
 ## The catalog
 
-`catalog.duckdb` holds views, not data: one per derived dataset, plus
+`catalog.duckdb` holds views, not data: one per derived dataset, one per
+reviews table, `coverage` with the coverage rows in force, plus
 `law_in_force` and four macros. It is rebuilt after each derive, or with
 `catalog`. The views use paths relative to the data root, so the data
 root can move.

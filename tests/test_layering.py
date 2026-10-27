@@ -6,7 +6,7 @@ from pathlib import Path
 
 SRC = Path(__file__).resolve().parent.parent / "src" / "nomoscope"
 LAYERS = [
-    {"errors", "parquet", "partition", "segments", "settings", "text"},
+    {"coverage", "errors", "parquet", "partition", "segments", "settings", "text"},
     {"graph"},
     {"snarf"},
     {"structure"},
