@@ -7,17 +7,19 @@ value of the drafting column of law_sections:
 
     [history]
     format = "numeric_mdy"    # a parser in history.FORMATS
-    which = "last"            # first or last
+    which = "last"            # first, last, or latest
     note = 'Note:'            # optional: text after it is ignored
     effective = '\\beff\\. {NUMERIC_DATE}'
     repeal = '\\bRepealed by Ord\\. [\\w-]+, eff\\. {NUMERIC_DATE}'
+    enacted_year = ', {YEAR}\\)'   # optional: for notes that give only a year
 
     [levels]
     words = ["subsection", "paragraph", "subparagraph"]
     indent = [7, 6]           # optional: rank lines by indent
 
 Each date phrase is a regular expression. {MONTH_DATE} and {NUMERIC_DATE}
-are replaced by patterns that capture the date. Either table is optional.
+are replaced by patterns that capture the date, and {YEAR} by one that
+captures a year. Either table is optional.
 """
 
 import hashlib
@@ -35,7 +37,12 @@ from nomoscope.errors import NomoscopeError
 
 # The scope of the conventions input of a derive step.
 SCOPE = "conventions"
-PLACEHOLDERS = {"{MONTH_DATE}": history.MONTH_DATE, "{NUMERIC_DATE}": history.NUMERIC_DATE}
+PLACEHOLDERS = {
+    "{MONTH_DATE}": history.MONTH_DATE,
+    "{NUMERIC_DATE}": history.NUMERIC_DATE,
+    "{YEAR}": history.YEAR,
+}
+WHICH = ("first", "last", "latest")
 CONTROLS = ("format", "which", "note")
 
 
@@ -61,26 +68,27 @@ NONE = Conventions()
 
 
 def phrases(name: str, raw: Mapping[str, Any]) -> dict[str, str]:
-    unknown = set(raw) - {*CONTROLS, *history.ASPECTS}
+    unknown = set(raw) - {*CONTROLS, *history.ASPECTS, *history.YEARS}
     if unknown:
         raise ConventionsError(f"{name}: unknown history keys {sorted(unknown)}")
     if raw.get("format") not in history.FORMATS:
         raise ConventionsError(f"{name}: format must be one of {sorted(history.FORMATS)}")
-    if raw.get("which") not in ("first", "last"):
-        raise ConventionsError(f"{name}: which must be first or last")
+    if raw.get("which") not in WHICH:
+        raise ConventionsError(f"{name}: which must be one of {', '.join(WHICH)}")
     found = {}
     for key, value in raw.items():
         if not isinstance(value, str):
             raise ConventionsError(f"{name}: {key} must be a string")
         for token, pattern in PLACEHOLDERS.items():
             value = value.replace(token, pattern)
-        if key in history.ASPECTS:
+        if key in (*history.ASPECTS, *history.YEARS):
             try:
                 compiled = re.compile(value)
             except re.error as e:
                 raise ConventionsError(f"{name}: {key}: {e}") from e
-            if "date" not in compiled.groupindex:
-                raise ConventionsError(f"{name}: {key} captures no date")
+            group = "year" if key in history.YEARS else "date"
+            if group not in compiled.groupindex:
+                raise ConventionsError(f"{name}: {key} captures no {group}")
         found[key] = value
     return found
 

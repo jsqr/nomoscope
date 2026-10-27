@@ -3,7 +3,12 @@
 A set of drafting conventions gives a regular expression for each date,
 with a group named date. It also gives the date format, and which match
 to take: first when the text names one act, last when it lists acts
-oldest first. Text after the note phrase is ignored.
+oldest first, latest when it lists them in no order. Text after the note
+phrase is ignored.
+
+Notes that give only a year, as "(Ord. 77-01, 1977)", give enacted_year
+through a phrase with a group named year. A note with an enacted date also
+gives its year.
 
 format names a parser function, because conventions abbreviate months
 differently (Sept., not Sep).
@@ -32,8 +37,10 @@ MONTH_DATE = r"(?P<date>[A-Z][a-z]{2,8}\.? \d{1,2}, \d{4})"
 MONTH_DATE_RE = re.compile(r"([A-Za-z]+)\.? (\d{1,2}), (\d{4})")
 NUMERIC_DATE = r"(?P<date>\d{1,2}-\d{1,2}-\d{2,4})"
 NUMERIC_DATE_RE = re.compile(r"(\d{1,2})-(\d{1,2})-(\d{2,4})")
-# A two-digit year is read in this century.
-CENTURY = 2000
+YEAR = r"(?P<year>\d{4})"
+# A two-digit year below PIVOT is read in this century, others in the last:
+# "1-5-99" is 1999, "1-1-26" is 2026.
+PIVOT = 50
 
 
 @dataclass(frozen=True)
@@ -43,9 +50,11 @@ class Dates:
     operative: date | None = None
     inoperative: date | None = None
     repeal: date | None = None
+    enacted_year: int | None = None
 
 
-ASPECTS = tuple(f.name for f in fields(Dates))
+YEARS = ("enacted_year",)
+ASPECTS = tuple(f.name for f in fields(Dates) if f.name not in YEARS)
 
 
 def month_day_year(written: str) -> date | None:
@@ -68,12 +77,20 @@ def numeric_mdy(written: str) -> date | None:
         return None
     year = int(m.group(3))
     try:
-        return date(year if year > 99 else CENTURY + year, int(m.group(1)), int(m.group(2)))
+        if year < 100:
+            year += 2000 if year < PIVOT else 1900
+        return date(year, int(m.group(1)), int(m.group(2)))
     except ValueError:
         return None
 
 
 FORMATS = {"month_day_year": month_day_year, "numeric_mdy": numeric_mdy}
+
+
+def _pick[T: (date, int)](found: list[T], which: str) -> T:
+    if which == "latest":
+        return max(found)
+    return found[-1 if which == "last" else 0]
 
 
 def parse(text: str | None, phrases: Mapping[str, str] | None) -> Dates:
@@ -83,16 +100,22 @@ def parse(text: str | None, phrases: Mapping[str, str] | None) -> Dates:
     read = FORMATS[phrases["format"]]
     note = phrases.get("note")
     body = re.split(note, text, maxsplit=1)[0] if note else text
-    last = phrases["which"] == "last"
-    found = {}
+    which = phrases["which"]
+    dates: dict[str, date] = {}
     for aspect in ASPECTS:
         pattern = phrases.get(aspect)
         if not pattern:
             continue
-        matches = list(re.finditer(pattern, body))
-        if not matches:
-            continue
-        when = read(matches[-1 if last else 0].group("date"))
-        if when is not None:
-            found[aspect] = when
-    return Dates(**found)
+        stated = [d for m in re.finditer(pattern, body) if (d := read(m.group("date")))]
+        if stated:
+            dates[aspect] = _pick(stated, which)
+    pattern = phrases.get("enacted_year")
+    years = [int(m.group("year")) for m in re.finditer(pattern, body)] if pattern else []
+    enacted = dates.get("enacted")
+    year: int | None
+    if which == "latest":
+        found = [*years, *([enacted.year] if enacted else [])]
+        year = max(found) if found else None
+    else:
+        year = enacted.year if enacted else (_pick(years, which) if years else None)
+    return Dates(**dates, enacted_year=year)

@@ -1,6 +1,9 @@
 from datetime import date
 
-from nomoscope.derive import history
+import polars as pl
+
+from nomoscope.derive import datasets, history
+from nomoscope.derive.conventions import Conventions
 from tests.conventions import CONVENTIONS
 
 
@@ -83,3 +86,40 @@ def test_illinois_source_note_chain():
 def test_a_date_that_does_not_exist_is_not_read():
     assert parse("eff. 2-30-25.", "il") == history.Dates()
     assert parse("eff. Febtember 3, 2025.", "tx") == history.Dates()
+
+
+def test_a_two_digit_year_is_read_in_its_century():
+    assert history.numeric_mdy("1-5-99") == date(1999, 1, 5)
+    assert history.numeric_mdy("1-1-26") == date(2026, 1, 1)
+
+
+def test_the_latest_date_and_a_year_alone():
+    latest = {"format": "numeric_mdy", "which": "latest", "enacted": r"{NUMERIC_DATE}"}
+    phrases = {k: v.replace("{NUMERIC_DATE}", history.NUMERIC_DATE) for k, v in latest.items()}
+    note = "[Amended 6-16-2005; 4-18-1991; 12-18-2025 by L.L. No. 2-2025]"
+    assert history.parse(note, phrases) == history.Dates(
+        enacted=date(2025, 12, 18), enacted_year=2025
+    )
+    years = {"format": "numeric_mdy", "which": "latest", "enacted_year": rf", {history.YEAR}\)"}
+    assert history.parse("(Ord. 77-01 (part), 1977; Ord. 81-09, 1981)", years) == (
+        history.Dates(enacted_year=1981)
+    )
+    both = {**years, "enacted": rf", {history.NUMERIC_DATE}(?=[;)])"}
+    assert history.parse("(Ord. 98-13, 5-28-98; Ord. 2005-3, 2005)", both) == (
+        history.Dates(enacted=date(1998, 5, 28), enacted_year=2005)
+    )
+
+
+def test_a_section_without_history_takes_its_divisions_dates():
+    phrases = {"format": "numeric_mdy", "which": "latest", "enacted": history.NUMERIC_DATE}
+    found = Conventions(phrases={"bracketed": phrases})
+    frame = pl.DataFrame(
+        {
+            "history": ["[Amended 6-16-2005]", None],
+            "drafting": ["bracketed", "bracketed"],
+            "division_history": [None, "[Adopted 4-18-1991]"],
+        }
+    )
+    dated = frame.with_columns(datasets.stated_dates(frame, found))
+    assert dated["enacted_date"].to_list() == [date(2005, 6, 16), date(1991, 4, 18)]
+    assert dated["enacted_year"].to_list() == [2005, 1991]

@@ -198,3 +198,35 @@ def test_a_tail_note_shortens_the_last_subdivision():
     assert section["history"] == "(Ord. 77-01 (part), 1977)"
     b = next(s for s in section["subdivisions"] if s["path"] == "B")
     assert section["text"][b["start_char"] : b["end_char"]] == "B. The clerk keeps it."
+
+
+NOTES = gr.Sections(
+    notes=[r"\[(?:Adopted|Amended|HISTORY:)[^\]]*\]"], inherit=True, drafting="bracketed"
+)
+
+
+def test_notes_stay_in_the_text_and_a_section_without_them_inherits():
+    found = lines(
+        ("Chapter 5", 280, C),
+        ("FIRE", 280, C),
+        ("[HISTORY: Adopted 2-15-2018 by L.L. No. 1-2018.]", 72),
+        ("ARTICLE I", 280, C),
+        ("General", 280, C),
+        ("[Adopted 4-18-1991 by L.L. No. 1-1991]", 72),
+        ("§ 5-1. Purpose.", 72, B),
+        ("A. Permits. [Amended 6-16-2005 by L.L. No. 2-2005]", 72),
+        ("B. Fees.", 72),
+        ("§ 5-2. Fees.", 72, B),
+        ("Fees are set.", 72),
+    )
+    g = GRAMMAR.model_copy(update={"sections": NOTES})
+    first, second = sections.tabulate(parse(found, g), found, g).sections
+    assert first["text"] == "A. Permits. [Amended 6-16-2005 by L.L. No. 2-2005]\nB. Fees."
+    assert first["history"] == "[Amended 6-16-2005 by L.L. No. 2-2005]"
+    assert first["division_history"] is None
+    assert second["history"] is None
+    assert second["division_history"] == "[Adopted 4-18-1991 by L.L. No. 1-1991]"
+    plain = GRAMMAR.model_copy(update={"sections": NOTES.model_copy(update={"inherit": False})})
+    assert (
+        sections.tabulate(parse(found, plain), found, plain).sections[1]["division_history"] is None
+    )

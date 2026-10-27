@@ -65,6 +65,8 @@ def tabulated(zone: str) -> dict[str, pl.Schema]:
                 "node_treepath": pl.String,
                 "heading": pl.String,
                 "history": pl.String,
+                # The notes of the nearest division, for a section with none.
+                "division_history": pl.String,
                 "effective_date": pl.Date,
                 "statutory_default_date": pl.Date,
                 "statute_year": pl.Int64,
@@ -138,7 +140,7 @@ REQUIRED = {
 
 # Bump when conform gives different output for the same frame, so every
 # tabulate reruns.
-VERSION = "2"
+VERSION = "3"
 
 
 def conform(table: str, frame: pl.DataFrame, zone: str = "UTC") -> pl.DataFrame:

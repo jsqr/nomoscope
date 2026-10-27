@@ -29,6 +29,7 @@ VERSION_PAYLOAD = (
     "heading",
     "drafting",
     "history",
+    "division_history",
     "text",
     "markup",
     "line_indents",
@@ -104,6 +105,7 @@ VERSION_SCHEMA = pl.Schema(
         "heading": pl.String,
         "drafting": pl.String,
         "history": pl.String,
+        "division_history": pl.String,
         "text": pl.String,
         "markup": pl.String,
         "line_indents": LINE_INDENTS,
@@ -116,6 +118,7 @@ VERSION_SCHEMA = pl.Schema(
         "statute_section": pl.String,
         "effective_column": pl.Date,
         "enacted_date": pl.Date,
+        "enacted_year": pl.Int64,
         "effective_date": pl.Date,
         "operative_date": pl.Date,
         "inoperative_date": pl.Date,
@@ -140,6 +143,7 @@ HISTORY_SCHEMA = pl.Schema(
         "history": pl.String,
         "drafting": pl.String,
         "enacted_date": pl.Date,
+        "enacted_year": pl.Int64,
         "effective_date": pl.Date,
         "operative_date": pl.Date,
         "inoperative_date": pl.Date,
@@ -449,14 +453,23 @@ def law_observations(found: Ledgers, jurisdiction: str, census: pl.DataFrame) ->
 
 
 def stated_dates(frame: pl.DataFrame, conventions: Conventions) -> list[pl.Series]:
-    """The dates each row's history states."""
-    stated = [
-        history.parse(h, conventions.phrases.get(d) if d else None)
-        for h, d in frame.select("history", "drafting").iter_rows()
-    ]
+    """The dates each row's history states, else its division's, and the enacted year."""
+    inherited = (
+        frame["division_history"]
+        if "division_history" in frame.columns
+        else pl.Series([None] * frame.height, dtype=pl.String)
+    )
+    stated = []
+    for h, d, up in zip(frame["history"], frame["drafting"], inherited, strict=True):
+        phrases = conventions.phrases.get(d) if d else None
+        found = history.parse(h, phrases)
+        stated.append(found if found != history.Dates() else history.parse(up, phrases))
     return [
-        pl.Series(f"{aspect}_date", [getattr(d, aspect) for d in stated], dtype=pl.Date)
-        for aspect in history.ASPECTS
+        *(
+            pl.Series(f"{aspect}_date", [getattr(d, aspect) for d in stated], dtype=pl.Date)
+            for aspect in history.ASPECTS
+        ),
+        pl.Series("enacted_year", [d.enacted_year for d in stated], dtype=pl.Int64),
     ]
 
 

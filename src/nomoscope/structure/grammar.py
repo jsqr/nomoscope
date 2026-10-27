@@ -184,6 +184,18 @@ class Sections(BaseModel):
         description="Regexes; a paragraph that matches one is a publisher's note and is "
         'left out, e.g. "^Editor\'s note"',
     )
+    notes: list[str] = Field(
+        default=[],
+        description="Regexes; history notes anywhere in a section, such as an amendment "
+        "note after a subsection, e.g. '\\[Amended [^\\]]*\\]'. They stay in the text, and "
+        "history lists them before the section's trailing history",
+    )
+    inherit: bool = Field(
+        default=False,
+        description="A section with no history notes takes those of its nearest enclosing "
+        "division that has some, matched by `notes`, as division_history; for codes that "
+        "note a chapter's adoption once, above its sections",
+    )
     drafting: str | None = Field(
         default=None, description="The drafting conventions of the sections, by file name"
     )
@@ -210,6 +222,7 @@ class Sections(BaseModel):
     _history = field_validator("history")(_regexes)
     _history_tail = field_validator("history_tail")(_regexes)
     _drop = field_validator("drop")(_regexes)
+    _notes = field_validator("notes")(_regexes)
 
 
 class Correction(BaseModel):

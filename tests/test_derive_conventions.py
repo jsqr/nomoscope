@@ -34,6 +34,15 @@ def test_bad_conventions_are_refused():
         conventions.parse({"x": {"levels": {"words": ["a"], "indent": [1]}}})
     with pytest.raises(ConventionsError, match="unknown tables"):
         conventions.parse({"x": {"histry": {}}})
+    with pytest.raises(ConventionsError, match="captures no year"):
+        conventions.parse(history(enacted_year=r", \d{4}"))
+    with pytest.raises(ConventionsError, match="which must be one of"):
+        conventions.parse({"x": {"history": {"format": "numeric_mdy", "which": "most"}}})
+
+
+def test_a_year_phrase_and_the_latest_date():
+    found = conventions.parse(history(which="latest", enacted_year=r", {YEAR}\)"))
+    assert "(?P<year>" in found.phrases["x"]["enacted_year"]
 
 
 def test_the_fingerprint_follows_the_content():

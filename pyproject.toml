@@ -12,7 +12,7 @@ dependencies = [
   "httpx",
   "polars[pyarrow]",
   "pydantic>=2.14",
-  "pypdf>=6",
+  "pypdf[fonts]>=6",
   "tomli-w>=1.2",
   "typer",
 ]

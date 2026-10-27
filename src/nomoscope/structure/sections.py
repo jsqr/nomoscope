@@ -4,7 +4,9 @@ Sections are the divisions at the grammar's deepest division level, and
 the divisions at a level in `[sections] levels` with no division under
 them. Every other division is a heading row. A section's text is its document
 (`documents.py`) without the paragraphs `[sections]` drops, and its
-trailing history paragraphs go to `history`. The text is normalized
+trailing history paragraphs go to `history`, after the notes `[sections]
+notes` finds in the text. With `[sections] inherit`, a section without
+history takes its nearest division's notes as `division_history`. The text is normalized
 (`nomoscope.text`), and its subdivisions are spans into it. Treepaths are
 node ids.
 """
@@ -52,7 +54,8 @@ class Split:
 def split(text: str, rules: gr.Sections) -> Split:
     """Split a section's text into text, history, and dropped paragraphs.
 
-    History is the trailing paragraphs that match `history`, and a match of
+    History is the notes `notes` finds in the text, which stay in it, then
+    the trailing paragraphs that match `history`, and a match of
     `history_tail` at the end of the last paragraph left.
     """
     drop = [re.compile(r) for r in rules.drop]
@@ -76,7 +79,24 @@ def split(text: str, rules: gr.Sections) -> Split:
                 paras[kept[-1]] = last[: m.start()].rstrip()
                 break
     body = "\n".join(paras[i] for i in kept)
-    return Split(body, "\n".join(note) or None, dropped, kept)
+    inline = [m.group(0).strip() for i in kept for m in _notes(rules, paras[i])]
+    found = inline + note
+    return Split(body, "\n".join(found) or None, dropped, kept)
+
+
+def _notes(rules: gr.Sections, text: str) -> list[re.Match[str]]:
+    return sorted((m for r in rules.notes for m in re.finditer(r, text)), key=lambda m: m.start())
+
+
+def division_history(node: Row, by_id: dict[str, Row], rules: gr.Sections) -> str | None:
+    """The notes of the nearest division above `node` that has some."""
+    up = by_id.get(node["parent_id"])
+    while up is not None and up["kind"] != "root":
+        found = [m.group(0).strip() for m in _notes(rules, up["text"] or "")]
+        if found:
+            return "\n".join(found)
+        up = by_id.get(up["parent_id"])
+    return None
 
 
 def _offsets(text: str) -> list[int]:
@@ -158,6 +178,11 @@ def tabulate(nodes: list[Row], lines: list[Row], grammar: gr.Grammar) -> Tabulat
                 "node_treepath": n["parent_id"] or None,
                 "heading": n["heading"],
                 "history": parts.history,
+                "division_history": (
+                    division_history(n, by_id, grammar.sections)
+                    if grammar.sections.inherit and parts.history is None
+                    else None
+                ),
                 "text": normalize(parts.text),
                 "subdivisions": spans(doc["text"], parts, subs_of.get(n["id"], []), by_id),
                 "drafting": grammar.sections.drafting,

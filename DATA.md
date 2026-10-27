@@ -306,6 +306,7 @@ A version keeps each date in its own column:
 | column | source |
 | --- | --- |
 | `enacted_date` | the history note: when the act was passed |
+| `enacted_year` | the year of `enacted_date`, else of a note that gives only a year |
 | `effective_date` | the history note, else the source's own effective date (`effective_column`) |
 | `operative_date` | the history note |
 | `inoperative_date` | the history note: when the text expires |
@@ -319,6 +320,13 @@ The catalog's `law_in_force` gives each version's interval in force:
   `first_seen`.
 - It ends at the repeal date, else the inoperative date, else the
   successor's start, else `absent_from`.
+
+A version's history note is its own notes. A code that notes a chapter's
+adoption once, above its sections, can set `[sections] inherit` in its
+grammar: a section with no notes then keeps its nearest division's notes
+in `division_history`, and its dates come from those. `[sections] notes`
+collects notes printed inside a section, as after an amended subsection;
+they stay in the text.
 - `start_basis` and `end_basis` name the column each end came from. An
   open interval has `end_basis` `current`.
 

@@ -10,12 +10,17 @@ citation, so `67-14A(1)` is section 67-14A if the code has one.
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 
 from nomoscope.catalog import build
 from nomoscope.settings import Settings
 
 PATH_TOKEN = re.compile(r"[^\s()/]+")
+
+
+def today() -> date:
+    """Today in UTC, the zone of fetch times, so a code fetched today is in force."""
+    return datetime.now(UTC).date()
 
 
 def parse(ref: str, sections: Iterable[str]) -> tuple[str, str] | None:
@@ -59,7 +64,7 @@ def lookup(
             return None
         found = conn.execute(
             "SELECT * FROM subdivision_at(?, ?, ?, ?, ?)",
-            [jurisdiction, code, *parsed, on or date.today()],
+            [jurisdiction, code, *parsed, on or today()],
         )
         row = found.fetchone()
         names = [d[0] for d in found.description or []]

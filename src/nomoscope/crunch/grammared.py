@@ -320,6 +320,7 @@ SECTION_COLUMNS = (
     "node_treepath",
     "heading",
     "history",
+    "division_history",
     "text",
     "subdivisions",
     "drafting",

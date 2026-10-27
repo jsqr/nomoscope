@@ -52,7 +52,9 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         jurisdiction: str,
         code: str,
         ref: Annotated[str, typer.Argument(help='A citation, such as "67-14(A)(1)"')],
-        on: Annotated[str | None, typer.Option(help="The date, YYYY-MM-DD; default today")] = None,
+        on: Annotated[
+            str | None, typer.Option(help="The date, YYYY-MM-DD; default today, UTC")
+        ] = None,
     ) -> None:
         """Print a section or subdivision as it was in force on a date."""
         cfg = load_settings(name)
@@ -67,7 +69,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         except duckdb.Error as e:
             raise fail(str(e)) from e
         if found is None:
-            raise fail(f"{ref}: not in force in {jurisdiction} {code} on {when or date.today()}")
+            raise fail(f"{ref}: not in force in {jurisdiction} {code} on {when or citing.today()}")
         where = f"({found.path.replace('/', ')(')})" if found.path else ""
         level = f"  [{found.level}]" if found.level else ""
         typer.echo(f"{found.section_num}{where}  {found.heading or ''}{level}")
