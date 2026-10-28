@@ -15,18 +15,19 @@ $data_root/
   sources/crunched/    tables built from the archive, by cruncher
   derived/             tables in the shared layout
   staging/             downloads in progress
-  reviews/             acceptances of parsed codes, from `grammar accept`
   coverage/            the jurisdictions the project covers, from `coverage`
-  review-pages/        HTML views of parsed codes, from `grammar review`
   graph.duckdb         the graph store
-  catalog.duckdb       views over derived/, reviews/, and coverage/
+  catalog.duckdb       views over derived/, coverage/, and the project's tables
 ```
 
+A project may keep its own directories under the data root, such as
+records of people's decisions; `Registry.views` shows their tables in the
+catalog.
+
 Each tier can be rebuilt from the one before it. The archive cannot be
-rebuilt, because a source may stop serving a file. `reviews/` and
-`coverage/` cannot be rebuilt either, because they record people's
-decisions. `staging/` and
-`review-pages/` are safe to delete.
+rebuilt, because a source may stop serving a file. `coverage/` cannot be
+rebuilt either, because it records people's decisions. `staging/` is safe
+to delete.
 
 The graph store records each step's inputs, code version, and output
 tables. A step reruns when one of these changes or an output file is
@@ -75,18 +76,19 @@ what the project builds is in the registry it passes to `cli.app`:
 - its sources and crunchers;
 - its routes, which send each record to a cruncher;
 - its segment settings, which derive cuts text with;
-- its directory of drafting conventions, `<drafting>.toml` files.
+- its directory of drafting conventions, `<drafting>.toml` files;
+- a reader of publishers' listings, for `coverage match`;
+- its own tables to show in the catalog (`views`).
 
-A `GrammarCruncher` is created with its directory of grammars,
-`<source>/<jurisdiction>/<code>.toml` files. Grammars and conventions are
-inputs of the steps that read them, so a change reruns those steps.
+Conventions, and any config files a cruncher declares, are inputs of the
+steps that read them, so a change reruns those steps.
 
 ## Stages
 
 | stage | command | reads | writes |
 | --- | --- | --- | --- |
 | snarf | `snarf fetch`, `snarf due`, `snarf import` | a source, or local files | `sources/snarfed/` |
-| crunch | `crunch` | `sources/snarfed/`, routes, grammars | `sources/crunched/<cruncher>/` |
+| crunch | `crunch` | `sources/snarfed/`, routes, a cruncher's config | `sources/crunched/<cruncher>/` |
 | derive | `derive` | tabulated tables, conventions, jurisdictions | `derived/`, the catalog |
 | query | `sql "<query>"` | `catalog.duckdb` | nothing |
 
@@ -112,14 +114,16 @@ A record can have attached records (`snarf/attach.py`): files made from it,
 such as OCR responses for a PDF, archived because they cannot be made
 again for free. An attached record's params name its record (`of`) and
 repeat that record's params; its feed is not crunchable, so it is never
-routed to a cruncher. The grammared cruncher reads it with its record, and
-attaching one reruns that record's parse.
+routed to a cruncher. A cruncher can read it with its record and declare it
+an input, so attaching one reruns that record's steps.
 
 `ocr run <source> <record>` OCRs a record's PDF in segments of pages
 (billed; the `ocr` extra; `--dry-run` shows pages and requests) and
 attaches the responses (feed `ocr`). `ocr import` attaches responses made
-elsewhere for the same file. Where a PDF has OCR, each table is read from
-its OCR `table` block, as markdown rows, instead of from the text layer.
+elsewhere for the same file. `nomoscope.pdf.lines` reads a PDF as lines
+with layout features, taking a page's text from its OCR where the text
+layer is unreadable, and each table from its OCR `table` block, as
+markdown rows.
 
 `snarf import` archives local files with a `file://` URL. The params
 record the importer and the file's modification time. The modification
@@ -158,49 +162,9 @@ sources/crunched/<cruncher>/<table>/publication=<unit>/data.parquet          sna
 sources/crunched/<cruncher>/tabulated/<table>/publication=<record>/data.parquet tabulated tables
 ```
 
-### Grammared crunchers
-
-A `GrammarCruncher` reads a printed code, such as a PDF or an HTML
-export, with the code's grammar (`structure/grammar.py`). Each record has
-two steps:
-
-- `parse` writes snapshot tables: `parse_lines` (every line with its
-  layout), `parse_nodes` (the tree, with the lines each node spans), and
-  `parse_findings` (what the checks report). The grammar file is an input,
-  so editing it reruns the parse.
-- `tabulate` writes the tabulated tables from the snapshots.
-
-Sections are the grammar's deepest division level. `[sections] levels`
-names higher levels whose divisions are tabulated as sections when nothing
-divides them, such as a definitions chapter without sections; the
-`unsectioned` check reports numbered ones that are not.
-
-After a person has reviewed a record's parsed code, `grammar accept`
-records their acceptance in two tables under `reviews/`. `reviews` has one
-row per acceptance: the code, the record, who accepted it and when, the
-finding counts of each check, the grammar's hash, and a note on why the
-findings are acceptable. `reviewed_sections` has one row per section of
-that record, with its heading, history, and hashes of its text and its
-subdivisions. Each acceptance adds files and replaces none, so the tables
-keep every acceptance; the latest one for a code is in force. The catalog
-has a view of each table.
-
-A tabulation is held, and derive does not read it, until three things are true.
-Someone has accepted a record of the code. No check has more findings than
-they accepted. And, if this is the record they accepted, every section
-still matches what they accepted. A change in nomoscope, in the grammar,
-or in an attached OCR record can change a section without adding a
-finding, and this comparison catches it. A later record of the same code,
-such as a new supplement, is judged on its findings alone. `grammar check`
-lists the sections that changed, and `status` counts held tabulations.
-`grammar sample`
-prints a record's lines for drafting a grammar, and `grammar infer`
-drafts one with a chat model (billed; the `infer` extra). `grammar check`
-parses a record with a grammar and writes nothing. `grammar review` writes
-the parse as an HTML page at `review-pages/<source>/<record>/index.html`, beside a
-link to the source file: each division and subdivision is badged with its
-level, its offset from the section level (section 0, chapter -1,
-subsection +1), and its pages, which link into a PDF source.
+A tabulation can be held: a cruncher that records `admitted: false` in
+the tabulate step's details keeps derive from reading it, for instance
+until a person has checked it. `status` counts held tabulations.
 
 ### The tabulated tables
 
@@ -225,7 +189,7 @@ spacing are one version. The source's own form belongs in `markup`.
 A cruncher that knows a section's subdivisions gives them in
 `subdivisions`: each one's path below the section (`A/1`), the source's
 word for its level, its style and number, and its span into the
-normalized text. The grammared cruncher does this.
+normalized text.
 
 `law_publications` describes the publication:
 
@@ -358,11 +322,9 @@ The catalog's `law_in_force` gives each version's interval in force:
   successor's start, else `absent_from`.
 
 A version's history note is its own notes. A code that notes a chapter's
-adoption once, above its sections, can set `[sections] inherit` in its
-grammar: a section with no notes then keeps its nearest division's notes
-in `division_history`, and its dates come from those. `[sections] notes`
-collects notes printed inside a section, as after an amended subsection;
-they stay in the text.
+adoption once, above its sections, can have its cruncher give a section
+without notes its nearest division's notes in `division_history`; its
+dates then come from those.
 - `start_basis` and `end_basis` name the column each end came from. An
   open interval has `end_basis` `current`.
 
@@ -396,7 +358,7 @@ has the same hash. The limit is in the registry's segment settings.
 ## The catalog
 
 `catalog.duckdb` holds views, not data: one per derived dataset, one per
-reviews table, `coverage` with the coverage rows in force, plus
+table in the registry's `views`, `coverage` with the coverage rows in force, plus
 `law_in_force` and four macros. It is rebuilt after each derive, or with
 `catalog`. The views use paths relative to the data root, so the data
 root can move.
@@ -419,7 +381,7 @@ myproject sql "SELECT * FROM publications" --format csv
 `cite` takes a citation as people write it, `67-14(A)(1)`:
 
 ```
-myproject cite us-ny-amenia municipal "67-14(A)(1)" --on 2024-07-01
+myproject cite us-il-chicago municipal "67-14(A)(1)" --on 2024-07-01
 ```
 
 In Python, `nomoscope.catalog.cite.lookup(settings, jurisdiction, code,

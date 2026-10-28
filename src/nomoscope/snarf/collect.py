@@ -85,10 +85,6 @@ def walk(fetcher: Fetcher, base: str, *, prefix: str = "", depth: int = 1) -> It
             yield from walk(fetcher, entry.url, prefix=f"{name}/", depth=depth - 1)
 
 
-def as_candidates(entries: Iterable[Entry]) -> Iterator[Candidate]:
-    return (Candidate(e.name, e.url, e.size, e.modified) for e in entries)
-
-
 def unchanged(candidate: Candidate, prior: archive.Item | None, since: datetime | None) -> bool:
     """Whether the listing shows the file the previous pass stored.
 

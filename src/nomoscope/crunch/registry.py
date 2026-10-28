@@ -1,7 +1,8 @@
 """The registry: a project's sources and crunchers, by name, and what else
 nomoscope needs to know about the project: the routes from records to
 crunchers, the segment settings derive uses, the directory of drafting
-conventions, and a reader of publishers' listings for `coverage match`.
+conventions, a reader of publishers' listings for `coverage match`, and the
+project's own tables that the catalog shows as views.
 
 A cruncher plans and runs steps over the records routed to it. For each
 record it tabulates, it must write a tabulate step keyed (tabulate, <cruncher>,
@@ -56,6 +57,8 @@ class Registry:
     segments: SegmentSettings = DEFAULT_SEGMENTS
     conventions: Path | None = None
     listings: Callable[[Settings], list[Listing]] | None = None
+    # View name -> parquet glob relative to the data root, for tables the project keeps.
+    views: Callable[[Settings], Mapping[str, str]] | None = None
 
     def source(self, source_id: str) -> Source:
         try:
@@ -64,6 +67,9 @@ class Registry:
             raise FeedError(
                 f"unknown source {source_id!r}; known: {sorted(self.sources)}"
             ) from None
+
+    def project_views(self, cfg: Settings) -> Mapping[str, str]:
+        return self.views(cfg) if self.views else {}
 
     def cruncher(self, name: str) -> Cruncher:
         try:

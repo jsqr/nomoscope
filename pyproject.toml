@@ -18,20 +18,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# grammar infer: a billed chat-model call.
-infer = [
-  "httpx2>=2.13.1",
-  "mistralai>=3.1",
-  "pydantic-ai-slim[mistral]>=2.54.0",
-]
-
 # ocr run: billed OCR requests.
 ocr = ["mistralai>=3.1"]
 
 [dependency-groups]
 dev = [
   "basedpyright",
-  "nomoscope[infer,ocr]",
+  "nomoscope[ocr]",
   "pytest",
   "ruff",
 ]

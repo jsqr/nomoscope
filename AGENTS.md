@@ -19,15 +19,15 @@ jurisdictions, project specs or results. Those belong in project repos.
 | `src/nomoscope/{errors,parquet,partition,settings}.py` | Errors, parquet writes, partition paths, settings |
 | `src/nomoscope/graph/` | The graph store: records, steps, and staleness |
 | `src/nomoscope/snarf/` | Sources, feeds, fetching, and local import |
-| `src/nomoscope/structure/` | Lines, bookmarks, grammars, the parser, and checks for printed codes |
-| `src/nomoscope/crunch/` | The registry, routing, the tabulated schemas, the runner, and the grammared cruncher |
+| `src/nomoscope/pdf/` | A PDF's text layer, outline, and OCR, read as lines with layout features |
+| `src/nomoscope/crunch/` | The registry, routing, the tabulated schemas, and the runner |
 | `src/nomoscope/derive/` | The ledger, the datasets, conventions, parsers, segments, and the build step |
 | `src/nomoscope/catalog/` | The DuckDB catalog |
 | `src/nomoscope/cli/`, `status.py`, `show.py` | The command, built with `cli.app(registry, name)` |
 | `tests/fake.py` | A fake source and cruncher for the tests |
 
 Packages import only from their own layer or below: the bottom modules,
-then `graph`, `snarf`, `structure`, `crunch`, `derive`, `catalog`, and the command
+then `graph`, `snarf`, `pdf`, `crunch`, `derive`, `catalog`, and the command
 modules. `tests/test_layering.py` checks this.
 
 ## Rules by stage
@@ -54,20 +54,21 @@ root, and is rebuilt whole.
 ## What a project supplies
 
 - A `Registry` of `Source`s and crunchers, passed to `cli.app(registry,
-  name)`. A cruncher implements the `Cruncher` protocol, or is a `Tabulator`,
-  or a `GrammarCruncher` with a reader for its format and a directory of
-  grammars.
+  name)`. A cruncher implements the `Cruncher` protocol, or is a `Tabulator`
+  for one tabulate step per record. A project adds its own commands to the
+  typer app that `cli.app` returns.
 - In the same registry: the routes from records to crunchers, the segment
-  settings, and a directory of drafting conventions.
+  settings, a directory of drafting conventions, and the project's tables
+  to show in the catalog.
 
 `tests/fake.py` is the smallest example.
 
 ## Paid calls
 
-`grammar infer` sends a page sample to a chat model and is billed per
-token. `ocr run` sends every page of a PDF to an OCR model and is billed
-per page. An agent runs these only with `--dry-run`, which prints the page and
-token count, and leaves the paid run to a person. Tests never call a model.
+`ocr run` sends every page of a PDF to an OCR model and is billed per
+page. An agent runs it only with `--dry-run`, which prints the page and
+request count, and leaves the paid run to a person. Tests never call a
+model.
 
 ## The graph store
 
@@ -75,7 +76,7 @@ Each step records its inputs, code version, and output tables. It reruns
 when it has no row, an input's fingerprint changed, its code version
 changed, or an output file is missing. Each stage module, `Source`, and
 `Tabulator` has a `VERSION` or `version`. Bump it when the same inputs give
-different output. Grammars and conventions are inputs.
+different output. Conventions and a cruncher's config files are inputs.
 
 Tests must never run a real snarf against a developer's data root. The
 tests use a scratch data root (`tests/conftest.py`).

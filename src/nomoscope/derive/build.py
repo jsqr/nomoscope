@@ -197,6 +197,8 @@ def load_tabulated(cfg: Settings, source: str, tables: Iterable[steps.TableRow])
         sections=frames.get(tabulated_schemas.LAW_SECTIONS),
         nodes=frames.get(tabulated_schemas.LAW_NODES),
         sessions=frames.get(tabulated_schemas.SESSIONS),
+        codes=frames.get(tabulated_schemas.LAW_CODES),
+        attachments=frames.get(tabulated_schemas.LAW_ATTACHMENTS),
     )
 
 

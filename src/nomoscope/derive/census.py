@@ -6,7 +6,7 @@ functioning government. Census-designated places and other statistical
 areas are left out.
 
 A jurisdiction's id joins its state's id and a slug of its name:
-`us-ut-coalville`, `us-ny-amenia`. A county's id ends in its kind,
+`us-il-elgin`, `us-ny-pine_plains`. A county's id ends in its kind,
 `us-ny-dutchess_county`, because counties often share a name with a city.
 When places and county subdivisions in one state share a slug, as a town
 and a village of the same name do, each takes its kind as a suffix,
@@ -25,8 +25,8 @@ from collections.abc import Mapping
 import polars as pl
 
 from nomoscope.errors import NomoscopeError
+from nomoscope.rows import Row
 from nomoscope.snarf import census
-from nomoscope.structure import Row
 
 SCHEMA = pl.Schema(
     {
@@ -85,7 +85,7 @@ def slug(text: str) -> str:
 
 
 def split_kind(name: str, default: str) -> tuple[str, str]:
-    """A name without its kind, and the kind: "King Cove city" -> ("King Cove", "city")."""
+    """A name without its kind, and the kind: "Cold Bay city" -> ("Cold Bay", "city")."""
     lower = name.lower()
     for kind in KINDS:
         if lower.endswith(" " + kind):

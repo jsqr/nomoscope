@@ -134,6 +134,8 @@ def test_the_catalog_lists_every_view(three):
         [
             "jurisdictions",
             "law_ancestors",
+            "law_attachments",
+            "law_codes",
             "law_history",
             "law_in_force",
             "law_nodes",

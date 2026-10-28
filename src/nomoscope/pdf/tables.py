@@ -8,7 +8,7 @@ table's rows, without the header a continued page repeats.
 
 import re
 
-from nomoscope.structure import Row
+from nomoscope.rows import Row
 
 RUNNING = {"header", "footer"}
 SEPARATOR = re.compile(r":?-+:?")

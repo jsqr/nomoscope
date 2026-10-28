@@ -42,16 +42,16 @@ def test_the_census_files_give_governments_with_ids(cfg, tmp_path):
         "us-il-elgin",
         "us-il-windytown",
         "us-ny",
-        "us-ny-amenia",
         "us-ny-greene_county",
         "us-ny-hunter_town",
         "us-ny-hunter_village",
+        "us-ny-pine_plains",
         "us-pr",
     ]
     assert (found["us-dc"]["kind"], found["us-pr"]["kind"]) == ("district", "territory")
-    amenia = found["us-ny-amenia"]
-    assert (amenia["name"], amenia["kind"], amenia["parent"]) == ("Amenia", "town", "us-ny")
-    assert (amenia["county_fips"], amenia["geoid"]) == ("027", "3602701693")
+    town = found["us-ny-pine_plains"]
+    assert (town["name"], town["kind"], town["parent"]) == ("Pine Plains", "town", "us-ny")
+    assert (town["county_fips"], town["geoid"]) == ("027", "3602701693")
     chicago = found["us-il-chicago"]
     assert (chicago["place_fips"], chicago["county_fips"]) == ("14000", None)
     assert reference.build(cfg, store) == []

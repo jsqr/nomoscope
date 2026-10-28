@@ -12,7 +12,8 @@ A project that uses nomoscope should supply:
 - **Sources and crunchers:** code that fetches a publisher's files and
   turns them into the tabulated tables, passed to nomoscope in a `Registry`.
 - **In the same registry:** which cruncher reads each code, the segment
-  settings, and the directories of grammars and drafting conventions.
+  settings, the directory of drafting conventions, and any tables of the
+  project's own to show in the catalog.
 - **A data root:** a directory outside the repository for the archive and
   the tables.
 
@@ -61,8 +62,7 @@ key_env = "PUBLISHER_API_KEY"    # read with Settings.secret("publisher")
 ```
 
 The settings describe the machine. The project's routes, segment
-settings, conventions, and grammars are in its registry; DATA.md
-describes them.
+settings, and conventions are in its registry; DATA.md describes them.
 
 Commands:
 

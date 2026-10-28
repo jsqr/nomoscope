@@ -31,7 +31,10 @@ LAW_SECTIONS = "law_sections"
 LAW_NODES = "law_nodes"
 LAW_PUBLICATIONS = "law_publications"
 SESSIONS = "sessions"
-TABLES = (LAW_SECTIONS, LAW_NODES, LAW_PUBLICATIONS, SESSIONS)
+# The codes a publication holds, and the material in it that is not law.
+LAW_CODES = "law_codes"
+LAW_ATTACHMENTS = "law_attachments"
+TABLES = (LAW_SECTIONS, LAW_NODES, LAW_PUBLICATIONS, SESSIONS, LAW_CODES, LAW_ATTACHMENTS)
 
 BASES = ("stated", "last_modified", "fetched")
 # A section's subdivisions, where the cruncher knows them: spans into its
@@ -81,6 +84,9 @@ def tabulated(zone: str) -> dict[str, pl.Schema]:
                 "line_indents": pl.List(pl.Int64),
                 "subdivisions": SUBDIVISIONS,
                 "drafting": pl.String,
+                # The law_code of the part this section holds, as a water supply
+                # code incorporated in a section.
+                "part_code": pl.String,
             }
         ),
         LAW_NODES: pl.Schema(
@@ -96,6 +102,7 @@ def tabulated(zone: str) -> dict[str, pl.Schema]:
                 "position": pl.Int64,
                 "sequence": pl.Int64,
                 "contains_sections": pl.Boolean,
+                "part_code": pl.String,
             }
         ),
         LAW_PUBLICATIONS: pl.Schema(
@@ -121,6 +128,37 @@ def tabulated(zone: str) -> dict[str, pl.Schema]:
                 "end_date": pl.Date,
             }
         ),
+        # One row per code in a publication: the main code, then its parts.
+        # kind is law or rules (in the law tables), or reference, exhibit,
+        # apparatus, or superseded (in law_attachments). A part within a division names
+        # the host code and the division's treepath.
+        LAW_CODES: pl.Schema(
+            {
+                "jurisdiction": pl.String,
+                "law_code": pl.String,
+                "kind": pl.String,
+                "title": pl.String,
+                "host_law_code": pl.String,
+                "host_treepath": pl.String,
+                "page_first": pl.Int64,
+                "page_last": pl.Int64,
+            }
+        ),
+        # The text of each part that is not law: reproduced law, an exhibit,
+        # or the publisher's apparatus.
+        LAW_ATTACHMENTS: pl.Schema(
+            {
+                "jurisdiction": pl.String,
+                "code": pl.String,
+                "kind": pl.String,
+                "title": pl.String,
+                "host_law_code": pl.String,
+                "host_treepath": pl.String,
+                "page_first": pl.Int64,
+                "page_last": pl.Int64,
+                "text": pl.String,
+            }
+        ),
     }
 
 
@@ -135,12 +173,14 @@ REQUIRED = {
         "completeness",
     ),
     SESSIONS: ("jurisdiction", "session"),
+    LAW_CODES: ("jurisdiction", "law_code", "kind"),
+    LAW_ATTACHMENTS: ("jurisdiction", "code", "kind", "text"),
 }
 
 
 # Bump when conform gives different output for the same frame, so every
 # tabulate reruns.
-VERSION = "3"
+VERSION = "4"
 
 
 def conform(table: str, frame: pl.DataFrame, zone: str = "UTC") -> pl.DataFrame:

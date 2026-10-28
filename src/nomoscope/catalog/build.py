@@ -1,7 +1,7 @@
 """Build the catalog: catalog.duckdb, a file of views over the derived datasets.
 
-There is one view per dataset, one per reviews table, one of the coverage
-rows in force, plus the views and macros in schema.sql.
+There is one view per dataset, one per table the project names (`Registry.views`),
+one of the coverage rows in force, plus the views and macros in schema.sql.
 The catalog holds no data, so it is rebuilt whole after each derive.
 
 The views read parquet files by paths relative to the data root. connect
@@ -10,6 +10,7 @@ move. A plain duckdb.connect must set file_search_path itself.
 """
 
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
@@ -17,7 +18,6 @@ from pathlib import Path
 import duckdb
 
 from nomoscope import coverage
-from nomoscope.crunch import reviews
 from nomoscope.derive import registry
 from nomoscope.partition import DATA_FILE
 from nomoscope.settings import Settings
@@ -62,7 +62,24 @@ def search_path(conn: duckdb.DuckDBPyConnection, cfg: Settings) -> None:
     conn.execute(f"SET file_search_path = '{quoted}'")
 
 
-def build(cfg: Settings) -> CatalogResult:
+DATASET_OPTIONS = ", hive_partitioning = false, union_by_name = true"
+
+
+def parquet(glob: str, options: str = "") -> str:
+    """A read_parquet call over a glob, quoted for SQL."""
+    quoted = glob.replace("'", "''")
+    return f"read_parquet('{quoted}'{options})"
+
+
+def view_sql(name: str, glob: str, options: str = "") -> str:
+    return f"CREATE VIEW {name} AS SELECT * FROM {parquet(glob, options)}"
+
+
+def build(cfg: Settings, project: Mapping[str, str] | None = None) -> CatalogResult:
+    """Rebuild the catalog.
+
+    `project` maps more view names to parquet globs relative to the data root.
+    """
     tmp = cfg.catalog.with_suffix(".duckdb.tmp")
     tmp.unlink(missing_ok=True)
     views = []
@@ -73,25 +90,16 @@ def build(cfg: Settings) -> CatalogResult:
             glob = dataset_glob(cfg, dataset)
             if glob is None:
                 continue
-            quoted = glob.replace("'", "''")
-            conn.execute(
-                f"CREATE VIEW {dataset} AS SELECT * FROM read_parquet("
-                f"'{quoted}', hive_partitioning = false, union_by_name = true)"
-            )
+            conn.execute(view_sql(dataset, glob, DATASET_OPTIONS))
             views.append(dataset)
-        for table in reviews.TABLES:
-            glob = reviews.table_glob(cfg, table)
-            if glob is None:
-                continue
-            quoted = glob.replace("'", "''")
-            conn.execute(f"CREATE VIEW {table} AS SELECT * FROM read_parquet('{quoted}')")
-            views.append(table)
+        for view, glob in (project or {}).items():
+            conn.execute(view_sql(view, glob))
+            views.append(view)
         glob = coverage.table_glob(cfg)
         if glob is not None:
-            quoted = glob.replace("'", "''")
             conn.execute(
                 f"CREATE VIEW {coverage.COVERAGE} AS SELECT * EXCLUDE (listed) FROM ("
-                f"SELECT * FROM read_parquet('{quoted}') QUALIFY row_number() OVER "
+                f"SELECT * FROM {parquet(glob)} QUALIFY row_number() OVER "
                 "(PARTITION BY jurisdiction ORDER BY written_at DESC) = 1) WHERE listed"
             )
             views.append(coverage.COVERAGE)

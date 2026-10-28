@@ -1,9 +1,9 @@
 """The derived datasets by name, and the kinds of block that segments are cut from.
 
-Each dataset is built per jurisdiction. publications and sessions are
-built for every jurisdiction. The law datasets are built only for
-jurisdictions whose publications carry law tables. The reference datasets
-are not partitioned.
+Each dataset is built per jurisdiction. publications, sessions,
+law_codes, and law_attachments are built for every jurisdiction. The law
+datasets are built only for jurisdictions whose publications carry law
+tables. The reference datasets are not partitioned.
 """
 
 from dataclasses import dataclass
@@ -17,7 +17,10 @@ LAW_NODES = "law_nodes"
 LAW_ANCESTORS = "law_ancestors"
 LAW_SUBDIVISIONS = "law_subdivisions"
 SEGMENTS = "segments"
-COMMON_DATASETS = (PUBLICATIONS, SESSIONS)
+# The codes each publication holds, and its material that is not law.
+LAW_CODES = "law_codes"
+LAW_ATTACHMENTS = "law_attachments"
+COMMON_DATASETS = (PUBLICATIONS, SESSIONS, LAW_CODES, LAW_ATTACHMENTS)
 # Built only for jurisdictions whose publications carry law tables.
 LAW_DATASETS = (
     LAW_OBSERVATIONS,
@@ -43,4 +46,3 @@ class BlockKind:
 
 
 LAW_SECTION = BlockKind("law_section", LAW_VERSIONS, "id")
-BLOCK_KINDS = {b.kind: b for b in (LAW_SECTION,)}

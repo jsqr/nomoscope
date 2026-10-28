@@ -65,7 +65,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
             coverage.write(cfg, [entry], by or getpass.getuser())
         except NomoscopeError as e:
             raise fail(str(e)) from e
-        catalog.build(cfg)
+        catalog.build(cfg, registry.project_views(cfg))
         state = "listed" if entry.listed else "removed"
         typer.echo(f"{entry.jurisdiction} {state}: {entry.publisher or '-'} {entry.url or '-'}")
 
@@ -163,7 +163,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
             coverage.write(cfg, entries, by or getpass.getuser())
         except NomoscopeError as e:
             raise fail(str(e)) from e
-        catalog.build(cfg)
+        catalog.build(cfg, registry.project_views(cfg))
 
     @group.command("remove")
     def remove(jurisdiction: Jurisdiction, by: By = None, note: Note = None) -> None:

@@ -310,7 +310,7 @@ def closing(
     return first_break
 
 
-# The structure grammar's style names, as this module names them.
+# Style names in a tabulated `subdivisions` list, as this module names them.
 TABULATED_STYLES = {"arabic": DIGIT}
 RUN_IN = "run_in"
 

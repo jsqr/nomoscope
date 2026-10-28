@@ -18,6 +18,7 @@ from dataclasses import dataclass
 
 import polars as pl
 
+from nomoscope.crunch import schemas as tabulated_schemas
 from nomoscope.crunch.schemas import SUBDIVISIONS
 from nomoscope.derive import history, ids, ledger, registry, segment, subdivide
 from nomoscope.derive.conventions import NONE, Conventions
@@ -28,6 +29,7 @@ VERSION_KEY = ("law_code", "section_num", "version_id", "text_sha256")
 VERSION_PAYLOAD = (
     "heading",
     "drafting",
+    "part_code",
     "history",
     "division_history",
     "text",
@@ -46,7 +48,14 @@ VERSION_PAYLOAD = (
 HISTORY_KEY = (*VERSION_KEY, "history")
 HISTORY_PAYLOAD = ("drafting",)
 NODE_KEY = ("law_code", "node_treepath", "level", "number", "heading")
-NODE_PAYLOAD = ("parent_treepath", "depth", "position", "sequence", "contains_sections")
+NODE_PAYLOAD = (
+    "parent_treepath",
+    "depth",
+    "position",
+    "sequence",
+    "contains_sections",
+    "part_code",
+)
 ANCESTOR_KEY = ("law_code", "descendant_id", "ancestor_id", "depth")
 LINE_INDENTS = pl.List(pl.Int64)
 
@@ -116,6 +125,7 @@ VERSION_SCHEMA = pl.Schema(
         "statute_session": pl.Int64,
         "statute_chapter": pl.Int64,
         "statute_section": pl.String,
+        "part_code": pl.String,
         "effective_column": pl.Date,
         "enacted_date": pl.Date,
         "enacted_year": pl.Int64,
@@ -166,6 +176,7 @@ NODE_SCHEMA = pl.Schema(
         "position": pl.Int64,
         "sequence": pl.Int64,
         "contains_sections": pl.Boolean,
+        "part_code": pl.String,
         **SEEN,
         **ABSENT,
     }
@@ -220,9 +231,20 @@ SEGMENT_SCHEMA = pl.Schema(
         "block_sha256": pl.String,
     }
 )
+CODES_SCHEMA = pl.Schema(
+    {"publication": pl.String, **tabulated_schemas.tabulated("UTC")[tabulated_schemas.LAW_CODES]}
+)
+ATTACHMENTS_SCHEMA = pl.Schema(
+    {
+        "publication": pl.String,
+        **tabulated_schemas.tabulated("UTC")[tabulated_schemas.LAW_ATTACHMENTS],
+    }
+)
 SCHEMAS = {
     registry.PUBLICATIONS: PUBLICATION_SCHEMA,
     registry.SESSIONS: SESSION_SCHEMA,
+    registry.LAW_CODES: CODES_SCHEMA,
+    registry.LAW_ATTACHMENTS: ATTACHMENTS_SCHEMA,
     registry.LAW_OBSERVATIONS: OBSERVATION_SCHEMA,
     registry.LAW_VERSIONS: VERSION_SCHEMA,
     registry.LAW_HISTORY: HISTORY_SCHEMA,
@@ -248,6 +270,8 @@ class Tabulated:
     sections: pl.DataFrame | None = None
     nodes: pl.DataFrame | None = None
     sessions: pl.DataFrame | None = None
+    codes: pl.DataFrame | None = None
+    attachments: pl.DataFrame | None = None
 
 
 @dataclass(frozen=True)
@@ -259,6 +283,9 @@ class Ledgers:
     ancestors: pl.DataFrame | None
     publications: pl.DataFrame
     sessions: pl.DataFrame | None
+    # Not versioned: each publication's rows, the latest publication's kept.
+    codes: pl.DataFrame | None = None
+    attachments: pl.DataFrame | None = None
 
 
 def empty(schema: pl.Schema) -> pl.DataFrame:
@@ -303,7 +330,24 @@ def sighted(tabulated: Tabulated, jurisdiction: str) -> Ledgers:
             ),
         ).select(PUBLICATION_SCHEMA.names()),
         sessions=tabulated.sessions,
+        codes=_stamped(tabulated.codes, pub["publication"], CODES_SCHEMA),
+        attachments=_stamped(tabulated.attachments, pub["publication"], ATTACHMENTS_SCHEMA),
     )
+
+
+def _stamped(
+    frame: pl.DataFrame | None, publication: str, schema: pl.Schema
+) -> pl.DataFrame | None:
+    if frame is None:
+        return None
+    return frame.with_columns(pl.lit(publication).alias("publication")).select(schema.names())
+
+
+def _by_publication(a: pl.DataFrame | None, b: pl.DataFrame | None) -> pl.DataFrame | None:
+    """Rows of both, a publication's rows from b replacing those from a."""
+    if a is None or b is None:
+        return b if a is None else a
+    return pl.concat([a.filter(~pl.col("publication").is_in(b["publication"].implode())), b])
 
 
 def merged(a: Ledgers, b: Ledgers) -> Ledgers:
@@ -323,6 +367,8 @@ def merged(a: Ledgers, b: Ledgers) -> Ledgers:
         ancestors=fold(a.ancestors, b.ancestors, ANCESTOR_KEY),
         publications=publications,
         sessions=pl.concat(sessions, how="vertical_relaxed") if sessions else None,
+        codes=_by_publication(a.codes, b.codes),
+        attachments=_by_publication(a.attachments, b.attachments),
     )
 
 
@@ -360,6 +406,8 @@ def stored_ledgers(stored: Mapping[str, pl.DataFrame]) -> Ledgers:
         ancestors=part(registry.LAW_ANCESTORS, ANCESTOR_KEY),
         publications=stored[registry.PUBLICATIONS].select(PUBLICATION_SCHEMA.names()),
         sessions=stored.get(registry.SESSIONS),
+        codes=stored.get(registry.LAW_CODES),
+        attachments=stored.get(registry.LAW_ATTACHMENTS),
     )
 
 
@@ -408,6 +456,21 @@ def ancestor_edges(
         }
     )
     return pl.DataFrame(rows, schema=schema, orient="row")
+
+
+def _kept(
+    found: pl.DataFrame | None, pubs: pl.DataFrame, schema: pl.Schema, key: str
+) -> pl.DataFrame:
+    """The rows of publications still listed, sorted by publication date."""
+    if found is None or not found.height:
+        return empty(schema)
+    order = pubs.select("publication", "published_date")
+    return (
+        found.join(order, on="publication", how="inner")
+        .sort("published_date", "publication", key)
+        .select(schema.names())
+        .cast(schema)
+    )
 
 
 def publications(found: Ledgers) -> pl.DataFrame:
@@ -737,6 +800,8 @@ def datasets(
     common = {
         registry.PUBLICATIONS: pubs,
         registry.SESSIONS: sessions(found, jurisdiction),
+        registry.LAW_CODES: _kept(found.codes, pubs, CODES_SCHEMA, "law_code"),
+        registry.LAW_ATTACHMENTS: _kept(found.attachments, pubs, ATTACHMENTS_SCHEMA, "code"),
     }
     if not carries_law(found):
         return common

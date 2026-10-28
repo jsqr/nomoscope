@@ -4,12 +4,13 @@ Coordinates are PDF points from the top-left corner of the page, which
 match OCR coordinates scaled by dpi / 72.
 """
 
+import math
 from typing import Any
 
 from pypdf import PageObject, PdfReader
 from pypdf.generic import Destination
 
-from nomoscope.structure import Row
+from nomoscope.rows import Row
 
 BOLD = ("Bold", "Black", "Heavy", "Semibold", "Demi")
 ITALIC = ("Italic", "Oblique")
@@ -55,6 +56,11 @@ def _mult(m: list[float], n: list[float]) -> list[float]:
     ]
 
 
+def _scale(m: list[float]) -> float:
+    """The text matrix's vertical scale; rotated text has none on the diagonal."""
+    return math.hypot(m[2], m[3]) or math.hypot(m[0], m[1])
+
+
 def page_spans(page: PageObject, page_no: int, source: str, digest: str) -> list[Row]:
     """Return one row per visible text fragment on a page, in content-stream order.
 
@@ -88,7 +94,7 @@ def page_spans(page: PageObject, page_no: int, source: str, digest: str) -> list
                 "page_height": float(box.height),
                 "x": round(m[4] - float(box.left), 2),
                 "y": round(float(box.top) - m[5], 2),
-                "size": round(size * abs(m[3] or m[0]), 2),
+                "size": round(size * _scale(m), 2),
                 "font": name,
                 "bold": any(s in name for s in BOLD),
                 "italic": any(s in name for s in ITALIC),

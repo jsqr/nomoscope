@@ -129,12 +129,6 @@ def table_row(
     )
 
 
-def parquet_row(cfg: Settings, name: str, path: Path, *, sha256: str | None = None) -> TableRow:
-    """A table row for a parquet file on disk. Reads only the file's metadata."""
-    rows = pl.scan_parquet(path).select(pl.len()).collect().item()
-    return table_row(cfg, name, path, pl.Schema(pl.read_parquet_schema(path)), rows, sha256=sha256)
-
-
 def staleness(
     cfg: Settings,
     planned: Planned,

@@ -39,9 +39,10 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         for r in results:
             typer.echo(r.summary)
         if results or not cfg.catalog.is_file():
-            typer.echo(catalog.build(cfg).summary)
+            typer.echo(catalog.build(cfg, registry.project_views(cfg)).summary)
 
     @app.command("catalog")
     def catalog_build() -> None:
         """Rebuild the catalog."""
-        typer.echo(catalog.build(load_settings(name)).summary)
+        cfg = load_settings(name)
+        typer.echo(catalog.build(cfg, registry.project_views(cfg)).summary)

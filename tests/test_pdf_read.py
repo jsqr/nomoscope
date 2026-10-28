@@ -3,7 +3,7 @@ import io
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import DecodedStreamObject, DictionaryObject, Fit, NameObject
 
-from nomoscope.structure import pdf
+from nomoscope.pdf import read as pdf
 
 
 def outlined_pdf() -> PdfReader:
@@ -72,3 +72,8 @@ def test_span_rows_skip_invisible():
         b"3 Tr BT /F1 11 Tf 72 660 Td (hidden) Tj ET"
     )
     assert [r["text"] for r in pdf.span_rows(text_pdf(content), "code.pdf", "abc")] == ["visible"]
+
+
+def test_rotated_text_keeps_its_size():
+    assert pdf._scale([1.0, 0.0, 0.0, 1.0, 72.0, 700.0]) == 1.0
+    assert pdf._scale([0.0, 1.0, -1.0, 0.0, 72.0, 700.0]) == 1.0

@@ -27,11 +27,11 @@ PLACES = [
     # The jurisdiction of the other tests' code.
     ("IL", "1799999", "09999999", "Windytown city", "25", "A", "1000000   "),
     ("NY", "3636167", "02390907", "Hunter village", "47", "A", "4689283   "),
-    ("NY", "3601682", "02389131", "Amenia CDP", "57", "S", "2964541   "),
+    ("NY", "3601682", "02389131", "Pine Plains CDP", "57", "S", "2964541   "),
 ]
 COUSUBS = [
     ("USPS", "GEOID", "ANSICODE", "NAME", "FUNCSTAT", "ALAND"),
-    ("NY", "3602701693", "00978674", "Amenia town", "A", "112132696   "),
+    ("NY", "3602701693", "00978674", "Pine Plains town", "A", "112132696   "),
     ("NY", "3603936178", "00979086", "Hunter town", "A", "232815806   "),
     ("IL", "1703114000", "00428803", "Chicago city", "F", "589764134   "),
     ("IL", "1703148659", "00429339", "Milan township", "A", "93117392   "),

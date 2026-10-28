@@ -10,9 +10,9 @@ from nomoscope.crunch import runner
 from nomoscope.crunch.registry import Registry
 from nomoscope.graph import records
 from nomoscope.graph.store import Store
+from nomoscope.pdf import ocr
 from nomoscope.snarf import archive, attach, local
 from nomoscope.snarf.feeds import Feed, Source
-from nomoscope.structure import ocr
 from tests import fake
 
 OCR = Feed("ocr", (), "none", days=(), completeness="full", crunchable=False)
@@ -128,3 +128,88 @@ def test_block_rows():
         93,
         "| a |",
     )
+
+
+class Job:
+    def __init__(self, status: str, output_file: str | None = None):
+        self.status, self.output_file = status, output_file
+        self.total_requests, self.completed_requests = 2, 0
+
+
+def batch_fakes(monkeypatch, statuses: list[str], errors: dict[str, str] | None = None):
+    """Patch the batch requests; return the submitted files."""
+    submitted: list[list[bytes]] = []
+    monkeypatch.setenv("MISTRAL_API_KEY", "key")
+    monkeypatch.setattr(ocr, "process", lambda *a: pytest.fail("no single request expected"))
+    monkeypatch.setattr(
+        ocr, "submit", lambda client, files, model, meta: submitted.append(files) or "j1"
+    )
+    monkeypatch.setattr(ocr, "job", lambda client, job_id: Job(statuses.pop(0), "out"))
+
+    def results(client, file_id):
+        lines = b"\n".join(submitted[-1]).splitlines()
+        names = [json.loads(line)["custom_id"] for line in lines]
+        found = {n: {"model": "m", "pages": []} for n in names if n not in (errors or {})}
+        return found, errors or {}
+
+    monkeypatch.setattr(ocr, "results", results)
+    return submitted
+
+
+def test_ocr_batch_submits_one_job_and_attaches_its_responses(cfg, record, monkeypatch):
+    submitted = batch_fakes(monkeypatch, ["SUCCESS"])
+    out = invoke("ocr", "run", fake.SOURCE_ID, record.id, "--pages", "2", "--batch")
+    assert out.exit_code == 0, out.output
+    [files] = submitted
+    assert [json.loads(line)["custom_id"] for line in b"\n".join(files).splitlines()] == [
+        "00000-00002.json",
+        "00002-00003.json",
+    ]
+    written = attach.find(cfg, fake.SOURCE_ID, record.id, "ocr")
+    assert written is not None
+    assert [i.name for i in written.items()] == ["00000-00002.json", "00002-00003.json"]
+
+
+def test_ocr_batch_without_waiting_checks_the_same_job_later(cfg, record, monkeypatch):
+    submitted = batch_fakes(monkeypatch, ["QUEUED", "SUCCESS"])
+    args = ("ocr", "run", fake.SOURCE_ID, record.id, "--pages", "2", "--batch")
+    out = invoke(*args, "--no-wait")
+    assert out.exit_code == 0, out.output
+    assert attach.find(cfg, fake.SOURCE_ID, record.id, "ocr") is None
+    out = invoke(*args, "--no-wait")
+    assert out.exit_code == 0, out.output
+    assert len(submitted) == 1
+    assert attach.find(cfg, fake.SOURCE_ID, record.id, "ocr") is not None
+
+
+def test_ocr_batch_with_failed_requests_resubmits_only_those(cfg, record, monkeypatch):
+    batch_fakes(monkeypatch, ["SUCCESS"], {"00002-00003.json": "too large"})
+    args = ("ocr", "run", fake.SOURCE_ID, record.id, "--pages", "2", "--batch")
+    out = invoke(*args)
+    assert out.exit_code == 1 and "1 segments missing" in out.output
+    assert attach.find(cfg, fake.SOURCE_ID, record.id, "ocr") is None
+    submitted = batch_fakes(monkeypatch, ["SUCCESS"])
+    out = invoke(*args)
+    assert out.exit_code == 0, out.output
+    [[resubmitted]] = submitted
+    assert json.loads(resubmitted)["custom_id"] == "00002-00003.json"
+    assert attach.find(cfg, fake.SOURCE_ID, record.id, "ocr") is not None
+
+
+def test_batch_files_stay_under_the_limit():
+    lines = [b"a" * 4, b"b" * 4, b"c" * 20, b"d"]
+    assert ocr.batch_files(lines, limit=10) == [b"aaaa\nbbbb", b"c" * 20, b"d"]
+
+
+def test_batch_output_parses_responses_and_errors():
+    data = b"\n".join(
+        json.dumps(line).encode()
+        for line in [
+            {"custom_id": "a", "response": {"status_code": 200, "body": {"pages": []}}},
+            {"custom_id": "b", "response": {"status_code": 400, "body": {"message": "bad"}}},
+            {"custom_id": "c", "error": {"message": "timeout"}},
+        ]
+    )
+    responses, errors = ocr.output(data)
+    assert responses == {"a": {"pages": []}}
+    assert set(errors) == {"b", "c"}
