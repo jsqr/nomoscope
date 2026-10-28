@@ -23,7 +23,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         state: Annotated[str | None, typer.Option(help="A state's postal code, such as ny")] = None,
     ) -> None:
         """Print the jurisdictions whose name contains TEXT, from the Census records."""
-        cfg = load_settings(name)
+        cfg = load_settings(name, registry)
         found = reference.census_records(cfg)
         if not found:
             raise fail(f"no Census records; fetch them with `{name} {FETCH}`")

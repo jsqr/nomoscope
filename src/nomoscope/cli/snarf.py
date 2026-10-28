@@ -68,7 +68,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         ] = None,
     ) -> None:
         """Fetch a source's feeds."""
-        cfg = load_settings(name)
+        cfg = load_settings(name, registry)
         try:
             src = registry.source(source)
             today = src.today()
@@ -88,7 +88,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
     @group.command("due")
     def due() -> None:
         """Fetch every source's feeds that are due today."""
-        cfg = load_settings(name)
+        cfg = load_settings(name, registry)
         try:
             for src in registry.sources.values():
                 today = src.today()
@@ -111,7 +111,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         force: Annotated[bool, typer.Option(help="Import even if unchanged")] = False,
     ) -> None:
         """Archive a local file or directory as one record."""
-        cfg = load_settings(name)
+        cfg = load_settings(name, registry)
         if not path.exists():
             raise fail(f"no such file or directory: {path}")
         try:

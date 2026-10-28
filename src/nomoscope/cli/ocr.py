@@ -107,7 +107,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
     app.add_typer(group, name="ocr")
 
     def located(source: str, record_id: str) -> tuple[Settings, archive.Record, archive.Item]:
-        cfg = load_settings(name)
+        cfg = load_settings(name, registry)
         try:
             registry.source(source).feed(FEED)
             record = archive.find(cfg.snarfed, source, record_id)
@@ -119,8 +119,14 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
     def run_(
         source: Source,
         record: RecordId,
-        pages: Annotated[int, typer.Option(help="Pages per request")] = ocr.SEGMENT_PAGES,
-        model: Annotated[str, typer.Option(help="OCR model")] = ocr.MODEL,
+        pages: Annotated[
+            int | None,
+            typer.Option(help="Pages per request; default the ocr.pages setting, else 8"),
+        ] = None,
+        model: Annotated[
+            str | None,
+            typer.Option(help="OCR model; default the ocr.model setting, else mistral-ocr-latest"),
+        ] = None,
         dry_run: Annotated[bool, typer.Option(help="Show pages and requests only")] = False,
         batch: Annotated[bool, typer.Option(help="Send the requests as one batch job")] = False,
         wait: Annotated[
@@ -129,9 +135,12 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
     ) -> None:
         """OCR the record's PDF. Billed per page."""
         cfg, found, item = located(source, record)
+        chosen = cfg.table("ocr")
+        ocr_model: str = model or chosen.get("model", ocr.MODEL)
+        per_request: int = pages or chosen.get("pages", ocr.SEGMENT_PAGES)
         path = blob_store(cfg).path(item.sha256)
         reader = PdfReader(path)
-        segs = ocr.segments(len(reader.pages), pages)
+        segs = ocr.segments(len(reader.pages), per_request)
         typer.echo(f"{item.name}: {len(reader.pages)} pages in {len(segs)} requests", err=True)
         if dry_run:
             return
@@ -147,19 +156,19 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         staged.mkdir(parents=True, exist_ok=True)
         todo = [seg for seg in segs if not (staged / seg.name).is_file()]
         if batch and todo:
-            missing = run_batch(client, reader, item, todo, staged, model, wait=wait)
+            missing = run_batch(client, reader, item, todo, staged, ocr_model, wait=wait)
             if missing is None:
                 return
             if missing:
                 raise typer.Exit(1)
         elif todo:
             for seg in todo:
-                response = ocr.process(client, ocr.extract(reader, seg), model)
+                response = ocr.process(client, ocr.extract(reader, seg), ocr_model)
                 (staged / seg.name).write_bytes(ocr.record(response, item.name, item.sha256, seg))
                 typer.echo(f"  {seg.name}", err=True)
         files = {seg.name: (staged / seg.name).read_bytes() for seg in segs}
         written = attach.write(
-            cfg, registry.source(source), found, FEED, files, params(item, model)
+            cfg, registry.source(source), found, FEED, files, params(item, ocr_model)
         )
         typer.echo(written.id)
 

@@ -23,7 +23,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         force: Annotated[bool, typer.Option(help="Refold even if fresh")] = False,
     ) -> None:
         """Build the derived datasets that are stale, then the catalog."""
-        cfg = load_settings(name)
+        cfg = load_settings(name, registry)
         try:
             store = Store(cfg)
             results = [
@@ -44,5 +44,5 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
     @app.command("catalog")
     def catalog_build() -> None:
         """Rebuild the catalog."""
-        cfg = load_settings(name)
+        cfg = load_settings(name, registry)
         typer.echo(catalog.build(cfg, registry.project_views(cfg)).summary)

@@ -77,7 +77,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         """Print the listed jurisdictions, with publisher, URL, and first and latest fetch."""
         if ctx.invoked_subcommand is not None:
             return
-        cfg = load_settings(name)
+        cfg = load_settings(name, registry)
         listed = coverage.in_force(cfg)
         if state is not None:
             listed = listed.filter(pl.col("jurisdiction").str.starts_with(f"us-{state.lower()}-"))
@@ -105,7 +105,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         note: Note = None,
     ) -> None:
         """List a jurisdiction, or change its publisher or URL. Values not given are kept."""
-        cfg = load_settings(name)
+        cfg = load_settings(name, registry)
         known(cfg, jurisdiction)
         entry = coverage.change(cfg, jurisdiction, publisher=publisher, url=url, note=note)
         written(cfg, entry, by)
@@ -121,7 +121,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         jurisdiction with one listing of its state, name, and kind gets it; the
         rest are printed to settle with `coverage set`.
         """
-        cfg = load_settings(name)
+        cfg = load_settings(name, registry)
         if registry.listings is None:
             raise fail("the project gives no listings")
         path = reference_path(cfg, datasets.JURISDICTIONS)
@@ -168,7 +168,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
     @group.command("remove")
     def remove(jurisdiction: Jurisdiction, by: By = None, note: Note = None) -> None:
         """Take a jurisdiction off the list. Its publisher and URL are kept."""
-        cfg = load_settings(name)
+        cfg = load_settings(name, registry)
         was = coverage.current(cfg, jurisdiction)
         if was is None or not was.listed:
             raise fail(f"{jurisdiction}: not listed")

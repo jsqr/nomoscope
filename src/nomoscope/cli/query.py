@@ -23,7 +23,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         rows: Annotated[int, typer.Option(help="Rows to print as a table")] = 50,
     ) -> None:
         """Run a read-only query against the catalog."""
-        cfg = load_settings(name)
+        cfg = load_settings(name, registry)
         if not cfg.catalog.is_file():
             raise fail(f"no catalog at {cfg.catalog}; run derive or catalog first")
         if output not in FORMATS:
@@ -57,7 +57,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         ] = None,
     ) -> None:
         """Print a section or subdivision as it was in force on a date."""
-        cfg = load_settings(name)
+        cfg = load_settings(name, registry)
         if not cfg.catalog.is_file():
             raise fail(f"no catalog at {cfg.catalog}; run derive or catalog first")
         try:

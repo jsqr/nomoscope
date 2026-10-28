@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from nomoscope import settings
@@ -117,3 +119,59 @@ def test_missing_data_root_names_the_search_paths(tmp_path, monkeypatch):
 def test_explicit_missing_path_is_an_error(tmp_path):
     with pytest.raises(settings.SettingsError, match="not found"):
         settings.load(APP, tmp_path / "absent.toml")
+
+
+def project_file(tmp_path, text):
+    path = tmp_path / "repo" / "settings.toml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    return path
+
+
+def test_the_machine_file_is_read_over_the_project_file(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    machine = write(tmp_path / "proj.toml", extra='[stage]\nmodel = "local"\n[box]\nx = 1\n')
+    project = project_file(tmp_path, '[stage]\nmodel = "shared"\neffort = "low"\n')
+    cfg = settings.load(APP, project=project, tables={"stage", "box"})
+    assert cfg.table("stage") == {"model": "local", "effort": "low"}
+    assert cfg.table("box") == {"x": 1}
+    assert cfg.table("absent") == {}
+    assert cfg.origins["stage.model"] == machine
+    assert cfg.origins["stage.effort"] == project
+    assert cfg.origins["data_root"] == machine
+    assert cfg.project_path == project
+
+
+def test_an_unknown_top_level_key_names_the_file_and_the_known_keys(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    project = project_file(tmp_path, '[stagee]\nmodel = "m"\n')
+    write(tmp_path / "proj.toml")
+    with pytest.raises(settings.SettingsError, match=r"unknown setting stagee in .*settings.toml"):
+        settings.load(APP, project=project, tables={"stage"})
+
+
+def test_nomoscope_reads_its_own_ocr_table(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    write(tmp_path / "proj.toml", extra='[ocr]\nmodel = "m"\n')
+    assert settings.load(APP).table("ocr") == {"model": "m"}
+
+
+def test_a_missing_project_file_is_an_error(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    write(tmp_path / "proj.toml")
+    with pytest.raises(settings.SettingsError, match="project settings file not found"):
+        settings.load(APP, project=tmp_path / "absent.toml")
+
+
+def test_env_data_root_is_its_own_origin(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PROJ_DATA_ROOT", str(tmp_path / "d"))
+    assert settings.load(APP).origins["data_root"].name == "$PROJ_DATA_ROOT"
+
+
+def test_layered_replaces_a_value_that_is_not_a_table():
+    merged, origins = settings.layered(
+        [(Path("a"), {"t": {"x": {"y": 1}}}), (Path("b"), {"t": {"x": 2}})]
+    )
+    assert merged == {"t": {"x": 2}}
+    assert origins == {"t.x": Path("b")}

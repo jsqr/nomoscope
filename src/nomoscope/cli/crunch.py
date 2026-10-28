@@ -24,7 +24,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         force: Annotated[bool, typer.Option(help="Rerun steps that are fresh")] = False,
     ) -> None:
         """Register, route, and crunch new records."""
-        cfg = load_settings(name)
+        cfg = load_settings(name, registry)
         try:
             results = runner.crunch(
                 cfg, Store(cfg), registry, names=cruncher or None, units=record, force=force

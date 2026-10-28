@@ -59,10 +59,19 @@ user_agent = "myproject/0.1 (+mailto:team@example.org)"
 
 [sources.publisher]
 key_env = "PUBLISHER_API_KEY"    # read with Settings.secret("publisher")
+
+[ocr]
+model = "mistral-ocr-latest"     # the default; pages = 8 is the other key
 ```
 
-The settings describe the machine. The project's routes, segment
-settings, and conventions are in its registry; DATA.md describes them.
+That file describes the machine. A project may also commit a settings
+file of its own (`Registry.settings`) for choices that change what it
+builds, such as a stage's model; the machine's file is read over it, key
+by key. `Registry.tables` names the project's own tables, which it reads
+with `Settings.table(name)`. Any other top-level key is an error.
+`settings` prints each value with the file it came from. The project's
+routes, segment settings, and conventions are in its registry; DATA.md
+describes them.
 
 Commands:
 

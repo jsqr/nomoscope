@@ -12,19 +12,25 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
     @app.command("settings")
     def settings_show() -> None:
         """Show the resolved settings."""
-        cfg = load_settings(name)
+        cfg = load_settings(name, registry)
         typer.echo(f"settings:    {cfg.path or '(none; ' + settings.env_data_root(name) + ')'}")
+        typer.echo(f"project:     {cfg.project_path or '(none)'}")
         typer.echo(f"data_root:   {cfg.data_root}")
         typer.echo(f"user_agent:  {cfg.user_agent}")
         typer.echo(f"graph:       {cfg.graph}")
         typer.echo(f"catalog:     {cfg.catalog}")
         typer.echo(f"sources:     {', '.join(sorted(registry.sources)) or '(none)'}")
         typer.echo(f"crunchers:   {', '.join(sorted(registry.crunchers)) or '(none)'}")
+        values = settings.flat(cfg.tables)
+        if values:
+            typer.echo("")
+        for key, value in values.items():
+            typer.echo(f"{key:28} {value!s:36} ({cfg.origins[key].name})")
 
     @app.command("status")
     def status_show() -> None:
         """Show what each source, cruncher, and jurisdiction has been through."""
-        report = status.status(load_settings(name), registry)
+        report = status.status(load_settings(name, registry), registry)
         typer.echo(f"data_root: {report.data_root}")
         typer.echo(f"catalog:   {'built' if report.catalog else 'not built'}")
         typer.echo("")
@@ -54,7 +60,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
     @graph.command("show")
     def graph_show() -> None:
         """List every planned step and its state."""
-        lines = show.listing(load_settings(name), registry)
+        lines = show.listing(load_settings(name, registry), registry)
         if not lines:
             typer.echo("no graph store yet")
         for line in lines:
@@ -64,7 +70,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
     @graph.command("reset")
     def graph_reset() -> None:
         """Delete the graph store. The next crunch adopts finished steps from their manifests."""
-        cfg = load_settings(name)
+        cfg = load_settings(name, registry)
         if Store(cfg).reset():
             typer.echo(f"deleted {cfg.graph}")
         else:

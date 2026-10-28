@@ -88,16 +88,21 @@ nothing.
 
 ## The project's registry
 
-The settings file describes the machine: where the data root is, the user
-agent, and which environment variables hold keys. Everything that decides
-what the project builds is in the registry it passes to `cli.app`:
+The machine's settings file gives where the data root is, the user agent,
+and which environment variables hold keys. The project's committed
+settings file (`Registry.settings`, read under the machine's) gives
+choices such as a stage's model and the OCR model. A setting that changes
+a step's output must enter that step's code version or inputs, so that
+changing it reruns the step. Everything else that decides what the
+project builds is in the registry it passes to `cli.app`:
 
 - its sources and crunchers;
 - its routes, which send each record to a cruncher;
 - its segment settings, which derive cuts text with;
 - its directory of drafting conventions, `<drafting>.toml` files;
 - a reader of publishers' listings, for `coverage match`;
-- its own tables to show in the catalog (`views`).
+- its own tables to show in the catalog (`views`);
+- its committed settings file and the tables it reads (`settings`, `tables`).
 
 Conventions, and any config files a cruncher declares, are inputs of the
 steps that read them, so a change reruns those steps.

@@ -1,7 +1,7 @@
 """Build a project's command.
 
 app(registry, name) returns a typer app. Its settings are read with
-settings.load(name).
+settings.load(name), under the registry's project file.
 """
 
 import logging

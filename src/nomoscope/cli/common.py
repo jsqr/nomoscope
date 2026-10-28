@@ -5,6 +5,7 @@ from typing import Annotated
 import typer
 
 from nomoscope import settings
+from nomoscope.crunch.registry import Registry
 from nomoscope.settings import Settings
 
 
@@ -13,9 +14,10 @@ def fail(message: str) -> typer.Exit:
     return typer.Exit(1)
 
 
-def load_settings(name: str) -> Settings:
+def load_settings(name: str, registry: Registry) -> Settings:
+    """The settings, with the registry's project file under the machine's."""
     try:
-        return settings.load(name)
+        return settings.load(name, project=registry.settings, tables=registry.tables)
     except settings.SettingsError as e:
         raise fail(str(e)) from e
 
