@@ -14,6 +14,7 @@ from nomoscope.cli import (
     coverage,
     crunch,
     derive,
+    embed,
     graph,
     jurisdictions,
     ocr,
@@ -35,6 +36,6 @@ def app(registry: Registry, name: str) -> typer.Typer:
         )
         logging.getLogger("httpx").setLevel(logging.DEBUG if verbose else logging.WARNING)
 
-    for module in (snarf, ocr, crunch, derive, jurisdictions, coverage, query, graph):
+    for module in (snarf, ocr, crunch, derive, embed, jurisdictions, coverage, query, graph):
         module.add(built, registry, name)
     return built

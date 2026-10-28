@@ -143,10 +143,16 @@ def test_the_catalog_lists_every_view(three):
             "law_subdivisions",
             "law_versions",
             "publications",
+            "segment_texts",
             "segments",
             "sessions",
         ]
     )
+    [check] = query(
+        "SELECT count(*) AS n, count(*) FILTER (WHERE sha256(content) <> content_sha256) AS bad"
+        " FROM segment_texts"
+    )
+    assert check["n"] > 0 and check["bad"] == 0
     out = CliRunner().invoke(cli.app(fake.REGISTRY, fake.APP), ["sql", "SELECT * FROM nowhere"])
     assert out.exit_code == 1 and "nowhere" in out.output
 

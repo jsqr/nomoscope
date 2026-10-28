@@ -82,6 +82,9 @@ myproject crunch                         # tabulate new records
 myproject derive                         # build the derived tables
 myproject status                         # show what has run
 myproject sql "SELECT section_num, text FROM law_at('us-il-springfield', DATE '2024-07-01')"
+myproject embed                          # estimate the cost of embedding new segments
+myproject embed --spend 2                # embed them (billed; FIREWORKS_API_KEY)
+myproject search "dogs off leash" -j us-il-springfield --text
 ```
 
 ## Contributing

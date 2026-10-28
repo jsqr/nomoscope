@@ -12,7 +12,9 @@ LAYERS = [
     {"pdf"},
     {"crunch"},
     {"derive"},
+    {"embed"},
     {"catalog"},
+    {"search"},
     {"cli", "status", "show"},
 ]
 RANK = {name: rank for rank, layer in enumerate(LAYERS) for name in layer}

@@ -16,8 +16,10 @@ $data_root/
   derived/             tables in the shared layout
   staging/             downloads in progress
   coverage/            the jurisdictions the project covers, from `coverage`
+  embeddings/          vectors of segments, by content hash, from `embed`
   graph.duckdb         the graph store
-  catalog.duckdb       views over derived/, coverage/, and the project's tables
+  catalog.duckdb       views over derived/, coverage/, embeddings/, and the project's tables
+  search.duckdb        the full-text index of segments, rebuilt by `search --text`
 ```
 
 A project may keep its own directories under the data root, such as
@@ -26,8 +28,9 @@ catalog.
 
 Each tier can be rebuilt from the one before it. The archive cannot be
 rebuilt, because a source may stop serving a file. `coverage/` cannot be
-rebuilt either, because it records people's decisions. `staging/` is safe
-to delete.
+rebuilt either, because it records people's decisions. `embeddings/`
+can be rebuilt only by paying for the vectors again. `staging/` and
+`search.duckdb` are safe to delete.
 
 The graph store records each step's inputs, code version, and output
 tables. A step reruns when one of these changes or an output file is
@@ -46,6 +49,7 @@ the catalog, `derived/`, and `staging/` stay with each data root.
   manifest last (see Crunched). A step counts once its manifest exists.
 - `coverage/` and a project's decision tables write one new file per
   change, named by time and writer.
+- `embeddings/` writes one new file per run, named by time and writer.
 
 Copying these tiers in two passes, files first and then the `fetch.json`
 files and step manifests, never leaves a record or step that looks
@@ -114,7 +118,8 @@ steps that read them, so a change reruns those steps.
 | snarf | `snarf fetch`, `snarf due`, `snarf import` | a source, or local files | `sources/snarfed/` |
 | crunch | `crunch` | `sources/snarfed/`, routes, a cruncher's config | `sources/crunched/<cruncher>/` |
 | derive | `derive` | tabulated tables, conventions, jurisdictions | `derived/`, the catalog |
-| query | `sql "<query>"` | `catalog.duckdb` | nothing |
+| embed | `embed --spend <dollars>` | `derived/segments`, the block tables | `embeddings/` |
+| query | `sql "<query>"`, `cite`, `search` | `catalog.duckdb`, `embeddings/` | `search.duckdb` |
 
 ## Snarfed
 
@@ -392,11 +397,72 @@ and the lead-in text of each enclosing subdivision. `content_sha256`
 hashes the context and the text, so the same text in two jurisdictions
 has the same hash. The limit is in the registry's segment settings.
 
+The text a segment stands for, the text that is embedded and indexed, is
+`segment.content(context, body)`: the context, a blank line, and the body,
+`text[start_char:end_char]` of its version (the body alone when there is
+no context). `embed --check` rebuilds it for every segment and checks it
+against `content_sha256`; the catalog's `segment_texts` view gives it in
+SQL.
+
+## Embeddings
+
+`embed` embeds each distinct segment text not yet stored, with the model
+the `[embeddings]` table names (default `qwen3-embedding-8b` at
+`dimensions = 1024`; the key in `FIREWORKS_API_KEY`). It is billed per
+token: without `--spend` it prints each jurisdiction's pending segments,
+estimated tokens (characters / 4), and cost, and sends nothing. A run
+takes segments in order until their estimated cost reaches the spend,
+writes vectors every 20,000, so a run that stops keeps what it paid for,
+and then rebuilds the catalog.
+
+```
+embeddings/model=<slug>-<dim>/jurisdiction=<j>/<time>-<writer>.parquet
+  content_sha256    the segment's hash
+  embedding         float32[dim], unit length
+```
+
+Qwen3-Embedding is a Matryoshka model: the provider returns the first
+`dim` values of the full 4096, and `embed` normalizes them again.
+Documents are embedded bare. A query carries an instruction in the
+model's template, `Instruct: {instruction}\nQuery:{query}`. Vectors are
+keyed by content, so a derive that changes segments changes only what is
+pending, and a model or width names its own partition. Embedding is not
+a graph step.
+
+## Search
+
+`search QUERY -j <jurisdiction> [--on DATE] [--text] [--rerank]` ranks
+the segments of the sections in force on the date (default today):
+
+1. by the inner product of their vectors with the query's, which carries
+   the `[search] instruction`; the top `depth` (100);
+2. with `--text`, by BM25 over their text, Porter-stemmed, from
+   `search.duckdb`, which is rebuilt when derive changes the segments;
+   `--text --no-vector` needs no vectors and no key;
+3. with both lists, by reciprocal rank fusion, k = 60;
+4. with `--rerank`, the top `rerank_depth` (50) by Qwen3-Reranker-8B's
+   probability that the segment, as embedded, meets the query under the
+   instruction (billed per token).
+
+Each section gives one hit, its best segment: rank, citation, heading,
+the segment's text as the snippet, and each list's score. In Python,
+`nomoscope.search.query.search(settings, query, jurisdiction, ...)`
+returns the hits.
+
+| `[search]` key | default |
+| --- | --- |
+| `instruction` | Given a search query, retrieve the passages of laws and regulations that answer it |
+| `depth` | 100 |
+| `rerank_model` | `qwen3-reranker-8b` |
+| `rerank_depth` | 50 |
+
 ## The catalog
 
 `catalog.duckdb` holds views, not data: one per derived dataset, one per
-table in the registry's `views`, `coverage` with the coverage rows in force, plus
-`law_in_force` and four macros. It is rebuilt after each derive, or with
+table in the registry's `views`, `coverage` with the coverage rows in force,
+`segment_texts` (each segment with its `body` and embedded `content`),
+`segment_embeddings` (one stored vector per jurisdiction and hash, for the
+`[embeddings]` model), plus `law_in_force` and five macros. It is rebuilt after each derive, or with
 `catalog`. The views use paths relative to the data root, so the data
 root can move.
 

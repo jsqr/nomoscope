@@ -2,6 +2,7 @@
 
 from typing import Annotated
 
+import duckdb
 import typer
 
 from nomoscope.catalog import build as catalog
@@ -11,6 +12,7 @@ from nomoscope.crunch.registry import Registry
 from nomoscope.derive import build, reference
 from nomoscope.errors import NomoscopeError
 from nomoscope.graph.store import Store
+from nomoscope.settings import Settings
 
 
 def add(app: typer.Typer, registry: Registry, name: str) -> None:
@@ -39,10 +41,15 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         for r in results:
             typer.echo(r.summary)
         if results or not cfg.catalog.is_file():
-            typer.echo(catalog.build(cfg, registry.project_views(cfg)).summary)
+            rebuild(cfg)
 
     @app.command("catalog")
     def catalog_build() -> None:
         """Rebuild the catalog."""
-        cfg = load_settings(name, registry)
-        typer.echo(catalog.build(cfg, registry.project_views(cfg)).summary)
+        rebuild(load_settings(name, registry))
+
+    def rebuild(cfg: Settings) -> None:
+        try:
+            typer.echo(catalog.build(cfg, registry.project_views(cfg)).summary)
+        except (NomoscopeError, duckdb.Error) as e:
+            raise fail(f"catalog: {e}") from e

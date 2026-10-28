@@ -22,13 +22,15 @@ jurisdictions, project specs or results. Those belong in project repos.
 | `src/nomoscope/pdf/` | A PDF's text layer, outline, and OCR, read as lines with layout features |
 | `src/nomoscope/crunch/` | The registry, routing, the tabulated schemas, and the runner |
 | `src/nomoscope/derive/` | The ledger, the datasets, conventions, parsers, segments, and the build step |
+| `src/nomoscope/embed/` | Embedding and reranking models, the provider client, the vector store |
 | `src/nomoscope/catalog/` | The DuckDB catalog |
+| `src/nomoscope/search/` | Search: vectors, full text, fusion, reranking |
 | `src/nomoscope/cli/`, `status.py`, `show.py` | The command, built with `cli.app(registry, name)` |
 | `tests/fake.py` | A fake source and cruncher for the tests |
 
 Packages import only from their own layer or below: the bottom modules,
-then `graph`, `snarf`, `pdf`, `crunch`, `derive`, `catalog`, and the command
-modules. `tests/test_layering.py` checks this.
+then `graph`, `snarf`, `pdf`, `crunch`, `derive`, `embed`, `catalog`,
+`search`, and the command modules. `tests/test_layering.py` checks this.
 
 ## Rules by stage
 
@@ -67,8 +69,10 @@ root, and is rebuilt whole.
 
 `ocr run` sends every page of a PDF to an OCR model and is billed per
 page. An agent runs it only with `--dry-run`, which prints the page and
-request count, and leaves the paid run to a person. Tests never call a
-model.
+request count, and leaves the paid run to a person. `embed --spend` and
+`search --rerank` are billed per token; an agent runs `embed` without
+`--spend`, which only estimates, and searches without `--rerank`, unless
+a person approves the cost. Tests never call a model.
 
 ## The graph store
 

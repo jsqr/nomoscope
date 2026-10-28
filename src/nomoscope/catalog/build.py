@@ -2,6 +2,9 @@
 
 There is one view per dataset, one per table the project names (`Registry.views`),
 one of the coverage rows in force, plus the views and macros in schema.sql.
+`segment_texts` gives each segment's embedded text, rebuilt as
+`embed.text` does; `segment_embeddings` gives the stored vectors of the
+`[embeddings]` model, one per jurisdiction and hash.
 The catalog holds no data, so it is rebuilt whole after each derive.
 
 The views read parquet files by paths relative to the data root. connect
@@ -19,8 +22,23 @@ import duckdb
 
 from nomoscope import coverage
 from nomoscope.derive import registry
+from nomoscope.embed import models, store
 from nomoscope.partition import DATA_FILE
 from nomoscope.settings import Settings
+
+SEGMENT_TEXTS = "segment_texts"
+SEGMENT_EMBEDDINGS = "segment_embeddings"
+# The body is the block's text from start_char to end_char (0-based, in
+# characters, as in Python); the content is segment.content's.
+SEGMENT_TEXTS_SQL = f"""
+CREATE VIEW {SEGMENT_TEXTS} AS
+SELECT s.*, substr(v.text, s.start_char + 1, s.end_char - s.start_char) AS body,
+       CASE WHEN coalesce(s.context, '') = '' THEN body
+            ELSE s.context || chr(10) || chr(10) || body END AS content
+FROM segments s
+JOIN law_versions v ON v.jurisdiction = s.jurisdiction AND v.id = s.block_id
+WHERE s.block_kind = 'law_section'
+"""
 
 # schema.sql is applied only when these views exist.
 NEEDS = (
@@ -106,6 +124,18 @@ def build(cfg: Settings, project: Mapping[str, str] | None = None) -> CatalogRes
         if set(NEEDS) <= set(views):
             conn.execute(schema())
             views.append("law_in_force")
+        if {registry.SEGMENTS, registry.LAW_VERSIONS} <= set(views):
+            conn.execute(SEGMENT_TEXTS_SQL)
+            views.append(SEGMENT_TEXTS)
+        glob = store.glob(cfg, models.configured(cfg.table("embeddings")))
+        if glob is not None:
+            source = parquet(glob, ", hive_partitioning = true, filename = true")
+            conn.execute(
+                f"CREATE VIEW {SEGMENT_EMBEDDINGS} AS SELECT * EXCLUDE (filename) FROM {source}"
+                " QUALIFY row_number() OVER"
+                " (PARTITION BY jurisdiction, content_sha256 ORDER BY filename) = 1"
+            )
+            views.append(SEGMENT_EMBEDDINGS)
     finally:
         conn.close()
     os.replace(tmp, cfg.catalog)

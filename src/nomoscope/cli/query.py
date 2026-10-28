@@ -1,5 +1,7 @@
-"""The sql and cite commands."""
+"""The sql, cite, and search commands."""
 
+import json
+from dataclasses import asdict
 from datetime import date
 from typing import Annotated
 
@@ -11,6 +13,8 @@ from nomoscope.catalog import build as catalog
 from nomoscope.catalog import cite as citing
 from nomoscope.cli.common import fail, load_settings
 from nomoscope.crunch.registry import Registry
+from nomoscope.errors import NomoscopeError
+from nomoscope.search import query as searching
 
 FORMATS = ("table", "csv", "json")
 
@@ -76,3 +80,54 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         typer.echo(found.text)
         until = f"{found.end_date} ({found.end_basis})" if found.end_date else "current"
         typer.echo(f"in force {found.start_date} ({found.start_basis}) to {until}")
+
+    @app.command()
+    def search(
+        query: str,
+        jurisdiction: Annotated[str, typer.Option("--jurisdiction", "-j", help="Jurisdiction id")],
+        on: Annotated[
+            str | None, typer.Option(help="The date, YYYY-MM-DD; default today, UTC")
+        ] = None,
+        vector: Annotated[
+            bool, typer.Option(help="Rank by stored vectors; needs embed and a key")
+        ] = True,
+        text: Annotated[bool, typer.Option(help="Also rank by BM25 over segment text")] = False,
+        rerank: Annotated[
+            bool, typer.Option(help="Rerank the top results with the reranker; billed")
+        ] = False,
+        limit: Annotated[int, typer.Option(help="Sections to print")] = 10,
+        output: Annotated[str, typer.Option("--format", help="table or json")] = "table",
+    ) -> None:
+        """Find the sections in force that answer a query: one hit per section, best first."""
+        cfg = load_settings(name, registry)
+        if output not in ("table", "json"):
+            raise fail(f"--format must be table or json, not {output!r}")
+        if not cfg.catalog.is_file():
+            raise fail(f"no catalog at {cfg.catalog}; run derive or catalog first")
+        try:
+            when = date.fromisoformat(on) if on else None
+        except ValueError as e:
+            raise fail(f"--on: {e}") from e
+        try:
+            hits = searching.search(
+                cfg,
+                query,
+                jurisdiction,
+                on=when,
+                vector=vector,
+                text=text,
+                rerank=rerank,
+                limit=limit,
+            )
+        except (NomoscopeError, duckdb.Error) as e:
+            raise fail(str(e)) from e
+        if output == "json":
+            for h in hits:
+                typer.echo(json.dumps({**asdict(h), "citation": h.citation}))
+            return
+        if not hits:
+            typer.echo("no hits")
+        for h in hits:
+            snippet = " ".join(h.snippet.split())
+            typer.echo(f"{h.rank:3}  {h.citation}  {h.heading or ''}  ({h.score:.4f})")
+            typer.echo(f"     {snippet[:200]}{'...' if len(snippet) > 200 else ''}")
