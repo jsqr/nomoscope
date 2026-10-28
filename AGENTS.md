@@ -78,6 +78,12 @@ changed, or an output file is missing. Each stage module, `Source`, and
 `Tabulator` has a `VERSION` or `version`. Bump it when the same inputs give
 different output. Conventions and a cruncher's config files are inputs.
 
+A crunch step's files are named by its fingerprint, and its manifest
+(`crunch/manifests.py`) holds its graph rows. A data root adopts a step
+from its manifest instead of running it, so the graph store can be
+deleted and refilled (`graph reset`), and data roots can share crunched
+files. Never rewrite a shared file in place: write a new name.
+
 Tests must never run a real snarf against a developer's data root. The
 tests use a scratch data root (`tests/conftest.py`).
 

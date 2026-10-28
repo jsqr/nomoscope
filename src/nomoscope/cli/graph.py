@@ -1,10 +1,11 @@
-"""The settings, status, and graph show commands."""
+"""The settings, status, and graph commands."""
 
 import typer
 
 from nomoscope import settings, show, status
 from nomoscope.cli.common import load_settings
 from nomoscope.crunch.registry import Registry
+from nomoscope.graph.store import Store
 
 
 def add(app: typer.Typer, registry: Registry, name: str) -> None:
@@ -59,3 +60,12 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         for line in lines:
             step = "/".join(p for p in (line.stage, line.scope, line.unit) if p)
             typer.echo(f"{line.state:8} {step}  ({line.inputs} inputs)")
+
+    @graph.command("reset")
+    def graph_reset() -> None:
+        """Delete the graph store. The next crunch adopts finished steps from their manifests."""
+        cfg = load_settings(name)
+        if Store(cfg).reset():
+            typer.echo(f"deleted {cfg.graph}")
+        else:
+            typer.echo("no graph store")

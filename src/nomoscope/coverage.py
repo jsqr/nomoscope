@@ -117,8 +117,16 @@ def change(
     )
 
 
+def writer_slug(by: str) -> str:
+    """The writer's name as it appears in a file name."""
+    return re.sub(r"[^a-z0-9_-]+", "_", by.lower()).strip("_") or "unknown"
+
+
 def write(cfg: Settings, entries: Sequence[Entry], by: str, at: datetime | None = None) -> Path:
-    """Write the entries as one file, named by the time they were written."""
+    """Write the entries as one file, named by the time and the writer.
+
+    Two people who write at the same moment write two files.
+    """
     if not entries:
         raise CoverageError("nothing to write")
     for e in entries:
@@ -127,7 +135,7 @@ def write(cfg: Settings, entries: Sequence[Entry], by: str, at: datetime | None 
     if repeated:
         raise CoverageError(f"more than one row for {', '.join(sorted(repeated))}")
     when = (at or datetime.now(UTC)).astimezone(UTC)
-    path = root(cfg) / f"{when.strftime('%Y-%m-%dT%H%M%S%fZ')}.parquet"
+    path = root(cfg) / f"{when.strftime('%Y-%m-%dT%H%M%S%fZ')}-{writer_slug(by)}.parquet"
     if path.exists():
         raise CoverageError(f"{path} exists")
     frame = pl.DataFrame(

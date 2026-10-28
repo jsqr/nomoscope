@@ -33,6 +33,25 @@ The graph store records each step's inputs, code version, and output
 tables. A step reruns when one of these changes or an output file is
 missing. `status` summarizes the store. `graph show` lists every step.
 
+### Sharing a data root
+
+Several data roots can share one copy of the archive, the crunched
+files, and the people's decisions, because none of these files is ever
+rewritten: a file name always holds the same content. The graph store,
+the catalog, `derived/`, and `staging/` stay with each data root.
+
+- The archive stores files by hash and each record under a new name. A
+  record counts once its `fetch.json` exists.
+- A crunch step names its files by its fingerprint and writes a step
+  manifest last (see Crunched). A step counts once its manifest exists.
+- `coverage/` and a project's decision tables write one new file per
+  change, named by time and writer.
+
+Copying these tiers in two passes, files first and then the `fetch.json`
+files and step manifests, never leaves a record or step that looks
+finished with files missing. `graph reset` deletes the graph store; the
+next crunch registers the records again and adopts each finished step.
+
 ### Coverage
 
 `coverage/` lists the jurisdictions the project collects codes for. Each
@@ -158,9 +177,22 @@ A cruncher turns records into the tabulated tables. It may write its own
 snapshot tables first. Paths:
 
 ```
-sources/crunched/<cruncher>/<table>/publication=<unit>/data.parquet          snapshots
-sources/crunched/<cruncher>/tabulated/<table>/publication=<record>/data.parquet tabulated tables
+sources/crunched/<cruncher>/<table>/publication=<unit>/<fingerprint>.parquet           snapshots
+sources/crunched/<cruncher>/tabulated/<table>/publication=<record>/<fingerprint>.parquet tabulated tables
+sources/crunched/<cruncher>/steps/<stage>/<unit>/<fingerprint>.json                    step manifests
 ```
+
+`<fingerprint>` is the first 16 hex digits of the step's fingerprint, so
+a step rerun under other inputs or code writes beside its old files.
+Readers take a step's paths from the graph store, not from a directory
+listing.
+
+After its tables, a step writes its manifest: what the graph store holds
+for it (inputs, code version, details, and each table's path, rows, and
+column fingerprint). When crunch finds a step to run whose manifest and
+tables are already present, it records the step from the manifest and
+does not run it; the crunch output marks it "adopted". `--force` and
+`--record` always run.
 
 A tabulation can be held: a cruncher that records `admitted: false` in
 the tabulate step's details keeps derive from reading it, for instance

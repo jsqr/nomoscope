@@ -18,6 +18,7 @@ class CrunchResult:
     jurisdiction: str
     tables: dict[str, TableResult]
     skipped: dict[str, int] = field(default_factory=dict)
+    adopted: bool = False
 
     @property
     def summary(self) -> str:
@@ -26,6 +27,8 @@ class CrunchResult:
             f"{self.cruncher:20} {self.stage:6} {self.unit}  {self.jurisdiction:24}"
             f" {len(self.tables):2} tables {rows:9} rows"
         )
+        if self.adopted:
+            line += "  adopted"
         if self.skipped:
             line += "  skipped " + ", ".join(f"{k} {n}" for k, n in self.skipped.items())
         return line

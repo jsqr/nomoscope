@@ -31,6 +31,17 @@ class Store:
     def exists(self) -> bool:
         return self.path.is_file()
 
+    def reset(self) -> bool:
+        """Delete the store. Return whether there was one.
+
+        Crunch then registers the records again and adopts each finished
+        step from its manifest. Derive steps run again.
+        """
+        existed = self.exists()
+        for path in (self.path, self.path.with_name(self.path.name + ".wal")):
+            path.unlink(missing_ok=True)
+        return existed
+
     @contextmanager
     def open(self, *, read_only: bool = False) -> Iterator[duckdb.DuckDBPyConnection]:
         """Return a connection, closed on exit.

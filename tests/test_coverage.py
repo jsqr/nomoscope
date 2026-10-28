@@ -224,3 +224,9 @@ def test_match_writes_exact_matches_and_leaves_publishers_set_by_hand(cfg, monke
 def test_match_needs_the_project_to_give_listings(cfg):
     out = CliRunner().invoke(cli.app(fake.REGISTRY, fake.APP), ["coverage", "match"])
     assert out.exit_code == 1 and "gives no listings" in out.output
+
+
+def test_two_writers_at_one_moment_write_two_files(cfg):
+    a = coverage.write(cfg, [coverage.Entry(J)], "J. Doe", at(1))
+    b = coverage.write(cfg, [coverage.Entry(J)], "rk", at(1))
+    assert a != b and a.name.endswith("-j_doe.parquet")

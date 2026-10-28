@@ -2,7 +2,8 @@
 
 Each archived record of a registered source is registered, then routed
 to a cruncher. Each cruncher plans steps over its records. A step runs
-when it is not fresh, in plan order.
+when it is not fresh, in plan order, unless a manifest shows it already
+finished (`manifests`); then it is adopted.
 """
 
 import logging
@@ -13,8 +14,8 @@ from pathlib import Path
 import duckdb
 import polars as pl
 
+from nomoscope.crunch import manifests, schemas
 from nomoscope.crunch import routes as routing
-from nomoscope.crunch import schemas
 from nomoscope.crunch.layout import Layout
 from nomoscope.crunch.registry import Registry
 from nomoscope.crunch.results import CrunchResult, TableResult
@@ -109,7 +110,7 @@ def crunch(
     """Register, route, and run every stale step.
 
     names limits the run to those crunchers. units limits it to those steps
-    and runs them even when fresh.
+    and runs them even when fresh. Neither units nor force adopts a step.
     """
     register(cfg, store, registry)
     routes = registry.routes
@@ -124,10 +125,36 @@ def crunch(
             if only is not None:
                 if planned.key.unit not in only:
                     continue
-            elif state[planned.key] is Staleness.FRESH and not force:
-                continue
+            elif not force:
+                if state[planned.key] is Staleness.FRESH:
+                    continue
+                adopted = adopt(cfg, store, planned, r.rows)
+                if adopted is not None:
+                    results.append(adopted)
+                    continue
             results.append(cruncher.run(cfg, store, planned, r.rows))
     return results
+
+
+def adopt(
+    cfg: Settings, store: Store, planned: Planned, rows: Mapping[str, RecordRow]
+) -> CrunchResult | None:
+    """Record a step from its manifest, if it finished elsewhere. None if it did not."""
+    found = manifests.read(cfg, planned)
+    if found is None:
+        return None
+    record_step(store, planned, found.tables, found.details)
+    k = planned.key
+    root = Layout(k.scope).root(cfg)
+    tables = {
+        t.name: TableResult(
+            table=t.name, rows=t.rows, path=str((cfg.data_root / t.path).relative_to(root))
+        )
+        for t in found.tables
+    }
+    row = rows.get(k.unit)
+    jurisdiction = row.jurisdiction if row is not None else ""
+    return CrunchResult(k.scope, k.stage, k.unit, jurisdiction, tables, adopted=True)
 
 
 def pending(
@@ -169,19 +196,21 @@ def write_tables(
     unit: str,
     planned: Planned,
     built: Mapping[str, pl.DataFrame],
-    path: Callable[[Settings, str, str], Path],
+    path: Callable[[Settings, str, str, str], Path],
     details: Mapping[str, object] | None = None,
 ) -> dict[str, TableResult]:
+    """Write the tables, then the step's manifest, then record the step."""
     tables: dict[str, TableResult] = {}
     rows = []
     for name, frame in built.items():
-        target = path(cfg, name, unit)
+        target = path(cfg, name, unit, planned.fingerprint)
         write_parquet(frame, target)
         rows.append(steps.table_row(cfg, name, target, frame.schema, frame.height))
         tables[name] = TableResult(
             table=name, rows=frame.height, path=str(target.relative_to(lay.root(cfg)))
         )
         log.info("%s/%s: %d rows", unit, name, frame.height)
+    manifests.write(cfg, planned, rows, details)
     record_step(store, planned, rows, details)
     return tables
 
