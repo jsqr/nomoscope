@@ -2,7 +2,8 @@
 
 The index holds every segment's embedded text (its headings, lead-ins,
 and body), stemmed (Porter) with English stopwords removed, using DuckDB's
-fts extension. The file is local and rebuilt whenever the segments
+fts extension, which `load_fts` installs from DuckDB's extension server
+on first use. The file is local and rebuilt whenever the segments
 change: it records the hashes derive gave the segments tables, and
 `ensure` rebuilds it when they differ.
 """
@@ -26,6 +27,12 @@ FILE = "search.duckdb"
 
 def path(cfg: Settings) -> Path:
     return cfg.data_root / FILE
+
+
+def load_fts(conn: duckdb.DuckDBPyConnection) -> None:
+    """Load the fts extension, installing it first if this machine lacks it."""
+    conn.execute("INSTALL fts")
+    conn.execute("LOAD fts")
 
 
 def stamp(cfg: Settings) -> str:
@@ -68,7 +75,7 @@ def ensure(cfg: Settings) -> Path:
             f" FROM cat.{catalog.SEGMENT_TEXTS}"
         )
         conn.execute("DETACH cat")
-        conn.execute("LOAD fts")
+        load_fts(conn)
         conn.execute(
             "PRAGMA create_fts_index('docs', 'segment_id', 'content',"
             " stemmer = 'porter', stopwords = 'english')"
@@ -84,7 +91,7 @@ def ranked(cfg: Settings, query: str, jurisdiction: str, depth: int) -> list[tup
     """Segment ids of the jurisdiction by BM25 score, best first."""
     conn = duckdb.connect(str(ensure(cfg)), read_only=True)
     try:
-        conn.execute("LOAD fts")
+        load_fts(conn)
         return [
             (sid, float(score))
             for sid, score in conn.execute(

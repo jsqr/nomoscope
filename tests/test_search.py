@@ -180,3 +180,13 @@ def test_a_mistyped_setting_is_an_error():
         models.configured({"dimensions": "1024"})
     with pytest.raises(models.EmbedError, match="dims: unknown"):
         models.configured({"dims": 1024})
+
+
+def test_full_text_installs_its_extension_on_a_fresh_machine(tmp_path):
+    import duckdb
+
+    conn = duckdb.connect(config={"extension_directory": str(tmp_path / "extensions")})
+    with pytest.raises(duckdb.Error, match="not found"):
+        conn.execute("LOAD fts")
+    fulltext.load_fts(conn)
+    assert conn.execute("SELECT stem('running', 'porter')").fetchone() == ("run",)
