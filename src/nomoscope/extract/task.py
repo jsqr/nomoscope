@@ -31,7 +31,7 @@ CONCURRENCY = 8
 
 @dataclass(frozen=True)
 class Task:
-    # Also the dataset's name, the settings table, and the store partition.
+    # Also the settings table and the store partition.
     name: str
     indicator: re.Pattern[str]
     output: type[BaseModel]
@@ -47,6 +47,12 @@ class Task:
     place_only: bool = False
     # Bump when the same stored items build a different dataset.
     version: str = "1"
+    # When the task's name is not a usable SQL view name.
+    dataset_name: str | None = None
+
+    @property
+    def dataset(self) -> str:
+        return self.dataset_name or self.name
 
     @property
     def prompt_tokens(self) -> int:

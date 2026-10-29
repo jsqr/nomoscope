@@ -449,14 +449,15 @@ a graph step.
 
 `extract <task>` sends passages to a chat model, stores the replies, and
 builds the task's dataset once a jurisdiction's passages are all extracted.
-`derive` also builds these datasets.
+`derive` also builds these datasets, each named after its task except
+`cross_references`, since `references` is reserved in SQL.
 
 | task | one row per |
 | --- | --- |
 | `definitions` | defined term, with its scope |
 | `interpretation` | rule of interpretation (number and gender, computation of time, severability, ...), with its scope |
 | `penalties` | penalty or other consequence of a violation, with its scope |
-| `references` | citation, with its resolved target |
+| `references` | citation, with its resolved target; the dataset is `cross_references` |
 | `enactments` | enacting instrument named, with its action and dates |
 
 A task runs only if its settings table names one of the project's chat

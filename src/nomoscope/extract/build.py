@@ -129,10 +129,10 @@ def build_one(
         .select(c.task.schema.names())
         .cast(c.task.schema)
     )
-    path = dataset_path(cfg, c.task.name, j)
+    path = dataset_path(cfg, c.task.dataset, j)
     write_parquet(frame, path)
     sha256 = fingerprint.file_sha256(path)
-    table = steps.table_row(cfg, c.task.name, path, frame.schema, frame.height, sha256=sha256)
+    table = steps.table_row(cfg, c.task.dataset, path, frame.schema, frame.height, sha256=sha256)
     with s.open() as conn:
         steps.record(conn, planned, [table], {"pending": missing})
     log.info("%s %s: %d rows", c.task.name, j, frame.height)
@@ -170,7 +170,7 @@ def build(
 def views(cfg: Settings) -> dict[str, str]:
     found = {}
     for t in tasks.TASKS:
-        root = cfg.derived / t.name
+        root = cfg.derived / t.dataset
         if any(root.glob("*/*.parquet")):
-            found[t.name] = (root.relative_to(cfg.data_root) / "*" / "*.parquet").as_posix()
+            found[t.dataset] = (root.relative_to(cfg.data_root) / "*" / "*.parquet").as_posix()
     return found

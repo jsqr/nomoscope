@@ -394,3 +394,10 @@ def test_the_extract_command_builds_only_its_own_task(windytown, monkeypatch):
     assert out.exit_code == 0, out.output
     assert "definitions" in out.output and "2 rows" in out.output
     assert "penalties" not in out.output
+
+
+def test_every_dataset_name_is_a_usable_view_name():
+    import duckdb
+
+    for t in tasks.TASKS:
+        duckdb.sql(f"CREATE TEMP VIEW {t.dataset} AS SELECT 1 AS x")
