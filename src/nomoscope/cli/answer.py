@@ -2,10 +2,11 @@
 
 import getpass
 import json
+from dataclasses import asdict
 from datetime import date
 from functools import partial
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import duckdb
 import httpx
@@ -20,12 +21,14 @@ from nomoscope.catalog import build as catalog
 from nomoscope.chat import ChatModel, Completion
 from nomoscope.cli.common import catalog_views, fail, load_settings
 from nomoscope.crunch.registry import Registry
+from nomoscope.embed import models as embeddings
 from nomoscope.errors import NomoscopeError
 from nomoscope.extract import rows
 from nomoscope.lookup import excerpt, tavily
 from nomoscope.lookup import run as looking
 from nomoscope.providers import TAVILY, make_client
 from nomoscope.search import query as searching
+from nomoscope.settings import Settings
 
 
 def add(app: typer.Typer, registry: Registry, name: str) -> None:
@@ -73,6 +76,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
                 if chosen.lookups
                 else None
             )
+            config = recorded(cfg, chosen, found_by)
         except NomoscopeError as e:
             raise fail(str(e)) from e
         order = g.order()
@@ -125,7 +129,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
                     lookups=lookups,
                 )  # fmt: skip
                 left -= run.dollars
-                store.write(cfg, g, run, getpass.getuser())
+                store.write(cfg, g, run, getpass.getuser(), config=config)
                 show(run, output)
                 if run.unasked:
                     typer.echo(
@@ -144,6 +148,21 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
             if conn is not None:
                 conn.close()
         typer.echo(f"spent about ${spend - left:.4f}", err=True)
+
+
+def recorded(
+    cfg: Settings, chosen: asking.Options, found_by: looking.Settings | None
+) -> dict[str, Any]:
+    """The settings that shaped an answer's context, as stored with it."""
+    lookups = None
+    if found_by is not None:
+        lookups = {**asdict(found_by), "model": found_by.model.slug}
+    return {
+        "answers": asdict(chosen),
+        "search": asdict(searching.options(cfg.table("search"))),
+        "embeddings": embeddings.configured(cfg.table("embeddings")).key,
+        "lookups": lookups,
+    }
 
 
 def _complete(http: httpx.Client, model: ChatModel, messages: list[dict[str, str]]) -> Completion:

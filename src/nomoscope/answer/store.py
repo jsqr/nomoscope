@@ -4,12 +4,15 @@
 
 One file per group run in a jurisdiction, one row per question asked.
 Answers are paid for, so they are kept with the archive's rules, not
-derived's. A row holds the passages supplied with their scores, so the
-same prompt can be rebuilt from the segments.
+derived's. A row holds the passages supplied with their scores and notes,
+the messages sent as JSON, and the config that shaped them.
 """
 
+import json
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import polars as pl
 
@@ -50,6 +53,9 @@ SCHEMA = pl.Schema(
         "passages": pl.List(PASSAGE),
         # The notes under each passage. Files written before notes lack the column.
         "notes": pl.List(NOTE),
+        # JSON: the messages of the last request, and the settings that shaped them.
+        "messages": pl.String,
+        "config": pl.String,
         "input_tokens": pl.Int64,
         "output_tokens": pl.Int64,
         "dollars": pl.Float64,
@@ -63,7 +69,13 @@ def folder(cfg: Settings, group: str, jurisdiction: str) -> Path:
     return partition_path(cfg.data_root / TIER, {"group": group, "jurisdiction": jurisdiction})
 
 
-def rows(g: Group, run: GroupRun, run_id: str, asked_at: datetime) -> pl.DataFrame:
+def rows(
+    g: Group,
+    run: GroupRun,
+    run_id: str,
+    asked_at: datetime,
+    config: Mapping[str, Any] | None = None,
+) -> pl.DataFrame:
     out = []
     for a in run.answered:
         r = a.response
@@ -102,6 +114,8 @@ def rows(g: Group, run: GroupRun, run_id: str, asked_at: datetime) -> pl.DataFra
                     for p in a.passages
                     for n in p.notes
                 ],
+                "messages": json.dumps(list(a.messages)) if a.messages else None,
+                "config": json.dumps(config, sort_keys=True, default=str) if config else None,
                 "input_tokens": a.input_tokens,
                 "output_tokens": a.output_tokens,
                 "dollars": a.dollars,
@@ -113,7 +127,12 @@ def rows(g: Group, run: GroupRun, run_id: str, asked_at: datetime) -> pl.DataFra
 
 
 def write(
-    cfg: Settings, g: Group, run: GroupRun, writer: str, at: datetime | None = None
+    cfg: Settings,
+    g: Group,
+    run: GroupRun,
+    writer: str,
+    at: datetime | None = None,
+    config: Mapping[str, Any] | None = None,
 ) -> Path | None:
     """Add one file for the run. None when nothing was asked."""
     if not run.answered:
@@ -124,7 +143,7 @@ def write(
     path = folder(cfg, g.name, run.jurisdiction) / f"{run_id}.parquet"
     if path.exists():
         raise FileExistsError(path)
-    write_parquet(rows(g, run, run_id, when), path)
+    write_parquet(rows(g, run, run_id, when, config), path)
     return path
 
 

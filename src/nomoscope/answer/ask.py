@@ -96,6 +96,8 @@ class Answered:
     input_tokens: int = 0
     output_tokens: int = 0
     dollars: float = 0.0
+    # The messages of the last request, retry turns included.
+    messages: tuple[Mapping[str, str], ...] = ()
 
     @property
     def cited(self) -> list[Passage]:
@@ -139,7 +141,9 @@ def ask(
     sent = prompt.messages(q, priors, found, jurisdiction)
     tokens_in = tokens_out = 0
     error = None
+    asked = sent
     for _ in range(2):
+        asked = sent
         reply = complete(sent)
         tokens_in += reply.input_tokens
         tokens_out += reply.output_tokens
@@ -156,10 +160,12 @@ def ask(
         return Answered(
             q, jurisdiction, on, model.slug, found, response, None,
             tokens_in, tokens_out, model.dollars(tokens_in, tokens_out) + looked_up,
+            tuple(asked),
         )  # fmt: skip
     return Answered(
         q, jurisdiction, on, model.slug, found, None, error,
         tokens_in, tokens_out, model.dollars(tokens_in, tokens_out) + looked_up,
+        tuple(asked),
     )  # fmt: skip
 
 

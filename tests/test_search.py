@@ -237,6 +237,13 @@ def test_ask_answers_a_group_in_order_and_stores_it(three, vectors, tmp_path, mo
     assert "Q1. Are dogs restricted?\nAnswer: Yes, at large." in sent[1]
     rows = invoke("sql", "SELECT question_id, answer FROM answers ORDER BY 1", "--format", "json")
     assert '"question_id":"Q1"' in rows and "They may not run at large." in rows
+    recorded = invoke(
+        "sql",
+        "SELECT json_extract_string(config, '$.answers.passages') p,"
+        " json_array_length(messages) n FROM answers ORDER BY question_id",
+        "--format", "json",
+    )  # fmt: skip
+    assert '"p":"12"' in recorded and '"n":2' in recorded
 
 
 def test_ask_needs_a_question_or_a_group(three):

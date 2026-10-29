@@ -1,3 +1,4 @@
+import json
 from datetime import date
 
 import pytest
@@ -282,7 +283,7 @@ def test_stored_answers_list_their_notes(cfg, conn):
         retrieve=lambda q: [p.hit for p in found], complete=lambda m: chat.Completion(body, 10, 5),
         spend=1.0, augment=lambda ps: augment.augment(conn, J, ON, BOTH, ps),
     )  # fmt: skip
-    store.write(cfg, g, asked, "test")
+    store.write(cfg, g, asked, "test", config={"answers": {"definitions": True}})
     # DuckDB reuses an open database for the same path, so the old catalog
     # must be closed before the rebuilt one is opened.
     conn.close()
@@ -292,10 +293,14 @@ def test_stored_answers_list_their_notes(cfg, conn):
         notes = c.execute(
             "SELECT n.label, n.kind, n.given_under FROM answers, unnest(notes) AS t(n)"
         ).fetchall()
+        messages, config = c.execute("SELECT messages, config FROM answers").fetchone()
     finally:
         c.close()
     assert ("P1", "definition", None) in notes and ("P2", "definition", "P1") in notes
     assert ("P1", "reference", None) in notes
+    system, user = json.loads(messages)
+    assert system["role"] == "system" and '- "Lot": defined under [P1]' in user["content"]
+    assert json.loads(config) == {"answers": {"definitions": True}}
 
 
 def test_answers_written_before_notes_still_read(cfg):

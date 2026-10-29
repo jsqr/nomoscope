@@ -648,13 +648,16 @@ answers/group=<name>/jurisdiction=<j>/<time>-<writer>.parquet
   run_id, group, group_sha256, question_id, question, after, jurisdiction,
   on_date, model, answer, rationale, confidence, citations,
   passages (label, law_version_id, segment_id, citation, score),
-  notes (label, kind, id, given_under),
+  notes (label, kind, id, given_under), messages, config,
   input_tokens, output_tokens, dollars, asked_at, error
 ```
 
 One file per group run in a jurisdiction. A single question is stored as
-group `ask`. The passages supplied are kept with their scores, so a
-prompt can be rebuilt from the segments. The catalog's `answers` view
+group `ask`. The passages supplied are kept with their scores. `messages`
+is the JSON of the last request's messages, retry turns included, and
+`config` the JSON of the settings that shaped them: the `[answers]` options,
+the `[search]` options, the embeddings model, and the `[lookups]` settings
+when lookups are on. Answers written before these columns lack them. The catalog's `answers` view
 reads them all.
 
 | `[answers]` key | default |
