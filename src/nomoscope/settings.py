@@ -31,7 +31,7 @@ from nomoscope.errors import NomoscopeError
 USER_CONFIG_DIR = Path("~/.config")
 DEFAULT_USER_AGENT = "nomoscope/0.1.0 (+https://github.com/jsqr/nomoscope)"
 # Top-level keys nomoscope reads. Projects add their tables.
-KEYS = frozenset({"data_root", "user_agent", "sources", "ocr", "embeddings", "search"})
+KEYS = frozenset({"data_root", "user_agent", "sources", "ocr", "embeddings", "search", "answers"})
 
 
 # Settings that left the settings file, and where they went.

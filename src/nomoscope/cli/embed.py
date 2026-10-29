@@ -8,10 +8,11 @@ import httpx
 import typer
 
 from nomoscope.catalog import build as catalog
-from nomoscope.cli.common import fail, load_settings
+from nomoscope.cli.common import catalog_views, fail, load_settings
 from nomoscope.crunch.registry import Registry
 from nomoscope.embed import client, models, run, text
 from nomoscope.errors import NomoscopeError
+from nomoscope.providers import make_client
 
 
 def add(app: typer.Typer, registry: Registry, name: str) -> None:
@@ -56,7 +57,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
                 if left <= 0 or todo.height == 0:
                     typer.echo(run.estimate(model, todo, j).summary)
                     continue
-                http = http or client.make_client(model.provider)
+                http = http or make_client(model.provider)
                 done = run.embed_pending(
                     cfg,
                     model,
@@ -70,7 +71,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
                 embedded += done.embedded
                 typer.echo(done.summary)
             if embedded and cfg.catalog.is_file():
-                typer.echo(catalog.build(cfg, registry.project_views(cfg)).summary)
+                typer.echo(catalog.build(cfg, catalog_views(cfg, registry)).summary)
         except NomoscopeError as e:
             raise fail(str(e)) from e
         finally:

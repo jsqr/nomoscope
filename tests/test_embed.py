@@ -5,6 +5,7 @@ import httpx
 import polars as pl
 import pytest
 
+from nomoscope import providers
 from nomoscope.derive import registry
 from nomoscope.derive.segment import content
 from nomoscope.embed import client, models, run, store, text
@@ -73,7 +74,7 @@ def test_a_rate_limit_is_retried_and_a_bad_request_is_not():
     assert waits == [2.0, 4.0]
     with (
         transport(lambda r: httpx.Response(400, text="no")) as c,
-        pytest.raises(models.EmbedError, match="HTTP 400: no"),
+        pytest.raises(providers.ProviderError, match="HTTP 400: no"),
     ):
         client.embed(c, SMALL, ["a"])
 
@@ -81,10 +82,10 @@ def test_a_rate_limit_is_retried_and_a_bad_request_is_not():
 def test_the_retry_wait_follows_retry_after_and_is_capped():
     with transport(lambda r: httpx.Response(429, headers={"retry-after": "12"})) as c:
         response = c.post("/embeddings", json={})
-    assert client.retry_wait(response, 1, lambda: 0.5) == 12.0
+    assert providers.retry_wait(response, 1, lambda: 0.5) == 12.0
     with transport(lambda r: httpx.Response(429)) as c:
         response = c.post("/embeddings", json={})
-    assert client.retry_wait(response, 20, lambda: 0.5) == client.MAX_WAIT
+    assert providers.retry_wait(response, 20, lambda: 0.5) == providers.MAX_WAIT
 
 
 def test_batches_respect_count_and_tokens():
@@ -108,8 +109,8 @@ def test_a_model_is_named_by_slug_and_width():
 
 def test_a_missing_key_is_reported(monkeypatch):
     monkeypatch.delenv("FIREWORKS_API_KEY", raising=False)
-    with pytest.raises(models.EmbedError, match="set FIREWORKS_API_KEY"):
-        client.make_client(QWEN.provider)
+    with pytest.raises(providers.ProviderError, match="set FIREWORKS_API_KEY"):
+        providers.make_client(QWEN.provider)
 
 
 def test_rerank_sends_the_template_and_reads_the_yes_probability():

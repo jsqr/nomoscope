@@ -9,7 +9,7 @@ import typer
 
 from nomoscope import coverage
 from nomoscope.catalog import build as catalog
-from nomoscope.cli.common import fail, load_settings
+from nomoscope.cli.common import catalog_views, fail, load_settings
 from nomoscope.crunch import runner
 from nomoscope.crunch.registry import Registry
 from nomoscope.derive import registry as datasets
@@ -65,7 +65,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
             coverage.write(cfg, [entry], by or getpass.getuser())
         except NomoscopeError as e:
             raise fail(str(e)) from e
-        catalog.build(cfg, registry.project_views(cfg))
+        catalog.build(cfg, catalog_views(cfg, registry))
         state = "listed" if entry.listed else "removed"
         typer.echo(f"{entry.jurisdiction} {state}: {entry.publisher or '-'} {entry.url or '-'}")
 
@@ -163,7 +163,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
             coverage.write(cfg, entries, by or getpass.getuser())
         except NomoscopeError as e:
             raise fail(str(e)) from e
-        catalog.build(cfg, registry.project_views(cfg))
+        catalog.build(cfg, catalog_views(cfg, registry))
 
     @group.command("remove")
     def remove(jurisdiction: Jurisdiction, by: By = None, note: Note = None) -> None:

@@ -17,6 +17,7 @@ $data_root/
   staging/             downloads in progress
   coverage/            the jurisdictions the project covers, from `coverage`
   embeddings/          vectors of segments, by content hash, from `embed`
+  answers/             answers to questions, with the passages they rest on, from `ask`
   graph.duckdb         the graph store
   catalog.duckdb       views over derived/, coverage/, embeddings/, and the project's tables
   search.duckdb        the full-text index of segments, rebuilt by `search --text`
@@ -29,7 +30,7 @@ catalog.
 Each tier can be rebuilt from the one before it. The archive cannot be
 rebuilt, because a source may stop serving a file. `coverage/` cannot be
 rebuilt either, because it records people's decisions. `embeddings/`
-can be rebuilt only by paying for the vectors again. `staging/` and
+and `answers/` can be rebuilt only by paying for them again. `staging/` and
 `search.duckdb` are safe to delete.
 
 The graph store records each step's inputs, code version, and output
@@ -49,7 +50,8 @@ the catalog, `derived/`, and `staging/` stay with each data root.
   manifest last (see Crunched). A step counts once its manifest exists.
 - `coverage/` and a project's decision tables write one new file per
   change, named by time and writer.
-- `embeddings/` writes one new file per run, named by time and writer.
+- `embeddings/` and `answers/` write one new file per run, named by time
+  and writer.
 
 Copying these tiers in two passes, files first and then the `fetch.json`
 files and step manifests, never leaves a record or step that looks
@@ -120,6 +122,7 @@ steps that read them, so a change reruns those steps.
 | derive | `derive` | tabulated tables, conventions, jurisdictions | `derived/`, the catalog |
 | embed | `embed --spend <dollars>` | `derived/segments`, the block tables | `embeddings/` |
 | query | `sql "<query>"`, `cite`, `search` | `catalog.duckdb`, `embeddings/` | `search.duckdb` |
+| answer | `ask --spend <dollars>` | search, a question or a group file | `answers/` |
 
 ## Snarfed
 
@@ -456,13 +459,78 @@ returns the hits.
 | `rerank_model` | `qwen3-reranker-8b` |
 | `rerank_depth` | 50 |
 
+## Answers
+
+`ask "<question>" -j <jurisdiction>` answers one question from the law in
+force; `ask --group <file> -j <j> [-j <j> ...]` answers a group of
+questions in each jurisdiction. Each question is searched for (vectors,
+full text, and reranking, `passages` hits), and a chat model answers from
+those passages. A response has four parts:
+
+- `answer`;
+- `rationale`, citing the passages by label, `[P2]`;
+- `citations`, the labels the answer rests on;
+- `confidence`, the model's probability, from 0 to 1, that the answer is
+  right given the passages.
+
+A reply that does not fit, or cites a passage not supplied, is sent back
+once with the reason; a second failure is stored as the question's
+`error`. It is billed per token: without `--spend`, `ask` prints the order
+and an estimate and calls nothing. A run stops before a question whose
+estimate would pass what is left of the spend.
+
+A group file is TOML. Questions form a DAG through `after`:
+
+```toml
+name = "paraphernalia"            # optional; default the file's stem
+
+[[questions]]
+id = "Q1"
+text = "Does the jurisdiction have laws restricting the sale of drug paraphernalia?"
+
+[[questions]]
+id = "Q2"
+after = ["Q1"]
+text = "If so, what specific types of paraphernalia are restricted?"
+```
+
+Ids are unique, every `after` names a question in the file, and there is
+no cycle. A question is asked after every question it depends on; among
+questions ready together, file order decides. A question's prompt holds
+the question, answer, and rationale of each of its ancestors, then its
+passages, each with its citation, heading, and context. Its search query
+is its ancestors' questions followed by its own, so "If so, which ones?"
+is searched with its referent. A dependent is asked even when an
+ancestor's answer is negative or failed.
+
+```
+answers/group=<name>/jurisdiction=<j>/<time>-<writer>.parquet
+  run_id, group, group_sha256, question_id, question, after, jurisdiction,
+  on_date, model, answer, rationale, confidence, citations,
+  passages (label, law_version_id, segment_id, citation, score),
+  input_tokens, output_tokens, dollars, asked_at, error
+```
+
+One file per group run in a jurisdiction. A single question is stored as
+group `ask`. The passages supplied are kept with their scores, so a
+prompt can be rebuilt from the segments. The catalog's `answers` view
+reads them all.
+
+| `[answers]` key | default |
+| --- | --- |
+| `model` | `glm-5-3-low` (GLM-5.3 on Fireworks, low reasoning effort) |
+| `passages` | 12 |
+| `text` | true |
+| `rerank` | true |
+
 ## The catalog
 
 `catalog.duckdb` holds views, not data: one per derived dataset, one per
 table in the registry's `views`, `coverage` with the coverage rows in force,
 `segment_texts` (each segment with its `body` and embedded `content`),
 `segment_embeddings` (one stored vector per jurisdiction and hash, for the
-`[embeddings]` model), plus `law_in_force` and five macros. It is rebuilt after each derive, or with
+`[embeddings]` model), `answers` (every stored answer), plus `law_in_force`
+and five macros. It is rebuilt after each derive, or with
 `catalog`. The views use paths relative to the data root, so the data
 root can move.
 

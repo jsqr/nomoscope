@@ -6,7 +6,7 @@ import duckdb
 import typer
 
 from nomoscope.catalog import build as catalog
-from nomoscope.cli.common import fail, load_settings
+from nomoscope.cli.common import catalog_views, fail, load_settings
 from nomoscope.cli.jurisdictions import FETCH
 from nomoscope.crunch.registry import Registry
 from nomoscope.derive import build, reference
@@ -50,6 +50,6 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
 
     def rebuild(cfg: Settings) -> None:
         try:
-            typer.echo(catalog.build(cfg, registry.project_views(cfg)).summary)
+            typer.echo(catalog.build(cfg, catalog_views(cfg, registry)).summary)
         except (NomoscopeError, duckdb.Error) as e:
             raise fail(f"catalog: {e}") from e

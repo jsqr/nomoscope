@@ -7,27 +7,15 @@ sends one prompt per document and asks for the logits of "no" and "yes",
 softmaxed (`normalize`); the score is the probability of "yes".
 """
 
-import logging
 import math
-import random
-import time
 from collections.abc import Callable, Sequence
 from typing import Any
 
 import httpx
 
-from nomoscope.embed.models import EmbeddingModel, EmbedError, Provider, Reranker, api_key
+from nomoscope.embed.models import EmbeddingModel, EmbedError, Reranker
+from nomoscope.providers import post
 from nomoscope.segments import CHARS_PER_TOKEN
-
-log = logging.getLogger(__name__)
-
-TIMEOUT = httpx.Timeout(30.0, read=300.0)
-RETRY_STATUS = frozenset({408, 409, 425, 429, 500, 502, 503, 504})
-# A provider that throttles a sustained rate answers 429 steadily during a
-# long run; waiting out its window is cheaper than losing the run.
-ATTEMPTS = 8
-BACKOFF = 2.0
-MAX_WAIT = 60.0
 
 BATCH_INPUTS = 64
 BATCH_TOKENS = 16000
@@ -39,55 +27,14 @@ def estimated_tokens(text: str) -> int:
     return math.ceil(len(text) / CHARS_PER_TOKEN)
 
 
-def make_client(provider: Provider) -> httpx.Client:
-    return httpx.Client(
-        base_url=provider.base_url,
-        headers={"Authorization": f"Bearer {api_key(provider)}"},
-        timeout=TIMEOUT,
-    )
-
-
-def retry_wait(
-    response: httpx.Response, attempt: int, jitter: Callable[[], float] = random.random
-) -> float:
-    """Seconds to wait before attempt `attempt` + 1: the server's Retry-After,
-    else exponential backoff; jittered, so throttled workers do not return together."""
-    after = response.headers.get("retry-after", "")
-    base = float(after) if after.replace(".", "", 1).isdigit() else BACKOFF**attempt
-    return min(base, MAX_WAIT) * (0.5 + jitter())
-
-
-def post(
-    client: httpx.Client,
-    payload: dict[str, Any],
-    *,
-    attempts: int = ATTEMPTS,
-    sleep: Callable[[float], None] = time.sleep,
-    jitter: Callable[[], float] = random.random,
-) -> dict[str, Any]:
-    """POST /embeddings, retrying throttles and server errors. Returns the body."""
-    response = client.post("/embeddings", json=payload)
-    for attempt in range(1, attempts):
-        if response.status_code not in RETRY_STATUS:
-            break
-        wait = retry_wait(response, attempt, jitter)
-        log.debug("%s HTTP %d, retrying in %.0fs", payload["model"], response.status_code, wait)
-        sleep(wait)
-        response = client.post("/embeddings", json=payload)
-    if response.status_code != 200:
-        raise EmbedError(f"{payload['model']}: HTTP {response.status_code}: {response.text}")
-    return response.json()
-
-
 def embed(
     client: httpx.Client, model: EmbeddingModel, texts: Sequence[str], **retry
 ) -> list[list[float]]:
     """One request. Unit vectors of the model's width, in the order of `texts`."""
     if not texts:
         return []
-    body = post(
-        client, {"model": model.name, "input": list(texts), "dimensions": model.dim}, **retry
-    )
+    payload = {"model": model.name, "input": list(texts), "dimensions": model.dim}
+    body = post(client, "/embeddings", payload, **retry)
     found = ordered(body, model.slug, len(texts))
     wrong = next((len(v) for v in found if len(v) != model.dim), None)
     if wrong is not None:
@@ -105,7 +52,7 @@ def rerank(client: httpx.Client, model: Reranker, prompts: Sequence[str], **retr
         "return_logits": list(model.logits),
         "normalize": True,
     }
-    found = ordered(post(client, payload, **retry), model.slug, len(prompts))
+    found = ordered(post(client, "/embeddings", payload, **retry), model.slug, len(prompts))
     if any(len(p) != 2 for p in found):
         raise EmbedError(f"{model.slug}: expected two probabilities per document")
     return [p[1] for p in found]

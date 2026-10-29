@@ -1,3 +1,4 @@
+import json
 from datetime import date
 
 import pytest
@@ -60,6 +61,7 @@ def test_the_nearest_vector_is_the_first_hit(three, vectors):
     assert hits[0].section_num == "2-1"
     assert hits[0].vector == pytest.approx(1.0)
     assert hits[0].snippet == "No dog shall run at large."
+    assert hits[0].context is not None and "Dogs at large" in hits[0].context
     assert len({h.law_version_id for h in hits}) == len(hits)
 
 
@@ -190,3 +192,49 @@ def test_full_text_installs_its_extension_on_a_fresh_machine(tmp_path):
         conn.execute("LOAD fts")
     fulltext.load_fts(conn)
     assert conn.execute("SELECT stem('running', 'porter')").fetchone() == ("run",)
+
+
+ASK_GROUP = """
+[[questions]]
+id = "Q1"
+text = "Are dogs restricted?"
+
+[[questions]]
+id = "Q2"
+after = ["Q1"]
+text = "If so, how?"
+"""
+
+
+def test_ask_answers_a_group_in_order_and_stores_it(three, vectors, tmp_path, monkeypatch):
+    from nomoscope.answer import client as chat
+
+    sent = []
+
+    def complete(http, model, messages, schema):
+        sent.append(messages[-1]["content"])
+        answer = "Yes, at large." if len(sent) == 1 else "They may not run at large."
+        body = {"answer": answer, "rationale": "[P1].", "citations": ["P1"], "confidence": 0.7}
+        return chat.Completion(json.dumps(body), 500, 50)
+
+    target = segment_of(three, "2-1")
+    monkeypatch.setenv("FIREWORKS_API_KEY", "test")
+    monkeypatch.setattr(query, "query_vector", lambda model, t: axis(vectors[target]))
+    monkeypatch.setattr(
+        query, "rerank_with", lambda m, i, q, docs: [float("dog" in d) for d in docs]
+    )
+    monkeypatch.setattr(chat, "complete", complete)
+    path = tmp_path / "dogs.toml"
+    path.write_text(ASK_GROUP)
+    estimate = invoke("ask", "--group", str(path), "-j", J, "--on", "2024-07-01")
+    assert "dogs: Q1 -> Q2" in estimate and "pass --spend" in estimate and not sent
+    out = invoke("ask", "--group", str(path), "-j", J, "--on", "2024-07-01", "--spend", "1")
+    assert "Yes, at large.  (confidence 0.70)" in out and "cited: [P1] municipal 2-1" in out
+    assert "Q1. Are dogs restricted?\nAnswer: Yes, at large." in sent[1]
+    rows = invoke("sql", "SELECT question_id, answer FROM answers ORDER BY 1", "--format", "json")
+    assert '"question_id":"Q1"' in rows and "They may not run at large." in rows
+
+
+def test_ask_needs_a_question_or_a_group(three):
+    assert "not both" in invoke("ask", "-j", J, code=1)
+    assert "at least one --jurisdiction" in invoke("ask", "Are dogs restricted?", code=1)

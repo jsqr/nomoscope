@@ -11,6 +11,7 @@ from typing import Annotated
 import typer
 
 from nomoscope.cli import (
+    answer,
     coverage,
     crunch,
     derive,
@@ -36,6 +37,17 @@ def app(registry: Registry, name: str) -> typer.Typer:
         )
         logging.getLogger("httpx").setLevel(logging.DEBUG if verbose else logging.WARNING)
 
-    for module in (snarf, ocr, crunch, derive, embed, jurisdictions, coverage, query, graph):
+    for module in (
+        snarf,
+        ocr,
+        crunch,
+        derive,
+        embed,
+        jurisdictions,
+        coverage,
+        query,
+        answer,
+        graph,
+    ):
         module.add(built, registry, name)
     return built

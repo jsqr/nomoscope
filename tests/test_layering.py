@@ -6,7 +6,17 @@ from pathlib import Path
 
 SRC = Path(__file__).resolve().parent.parent / "src" / "nomoscope"
 LAYERS = [
-    {"coverage", "errors", "parquet", "partition", "rows", "segments", "settings", "text"},
+    {
+        "coverage",
+        "errors",
+        "parquet",
+        "partition",
+        "providers",
+        "rows",
+        "segments",
+        "settings",
+        "text",
+    },
     {"graph"},
     {"snarf"},
     {"pdf"},
@@ -15,6 +25,7 @@ LAYERS = [
     {"embed"},
     {"catalog"},
     {"search"},
+    {"answer"},
     {"cli", "status", "show"},
 ]
 RANK = {name: rank for rank, layer in enumerate(LAYERS) for name in layer}

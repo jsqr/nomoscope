@@ -85,6 +85,7 @@ myproject sql "SELECT section_num, text FROM law_at('us-il-springfield', DATE '2
 myproject embed                          # estimate the cost of embedding new segments
 myproject embed --spend 2                # embed them (billed; FIREWORKS_API_KEY)
 myproject search "dogs off leash" -j us-il-springfield --text
+myproject ask --group questions.toml -j us-il-springfield --spend 1   # billed
 ```
 
 ## Contributing

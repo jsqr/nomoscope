@@ -5,6 +5,7 @@ from typing import Annotated
 import typer
 
 from nomoscope import settings
+from nomoscope.answer import store as answers
 from nomoscope.crunch.registry import Registry
 from nomoscope.settings import Settings
 
@@ -20,6 +21,11 @@ def load_settings(name: str, registry: Registry) -> Settings:
         return settings.load(name, project=registry.settings, tables=registry.tables)
     except settings.SettingsError as e:
         raise fail(str(e)) from e
+
+
+def catalog_views(cfg: Settings, registry: Registry) -> dict[str, str]:
+    """The views the catalog adds to its own: the project's tables and the stored answers."""
+    return {**registry.project_views(cfg), **answers.views(cfg)}
 
 
 def parse_params(pairs: list[str]) -> dict[str, str]:

@@ -14,6 +14,7 @@ from nomoscope.catalog import build as catalog
 from nomoscope.embed import client, models, store
 from nomoscope.embed.models import EmbeddingModel
 from nomoscope.errors import NomoscopeError
+from nomoscope.providers import make_client
 from nomoscope.search import fulltext
 from nomoscope.settings import Settings
 
@@ -69,6 +70,8 @@ class Hit:
     vector: float | None = None
     text: float | None = None
     rerank: float | None = None
+    # The segment's headings and lead-ins, which the embedded text puts before the snippet.
+    context: str | None = None
 
     @property
     def citation(self) -> str:
@@ -77,7 +80,7 @@ class Hit:
 
 
 CANDIDATES = f"""
-SELECT t.id AS segment_id, t.block_id, t.path, t.body, t.content, t.content_sha256,
+SELECT t.id AS segment_id, t.block_id, t.path, t.context, t.body, t.content, t.content_sha256,
        l.law_code, l.section_num, l.heading
 FROM {catalog.SEGMENT_TEXTS} t
 JOIN law_at($jurisdiction, $on) l ON l.id = t.block_id
@@ -208,6 +211,7 @@ def search(
                 path=row["path"] or "",
                 heading=row["heading"],
                 snippet=row["body"],
+                context=row["context"],
                 law_version_id=row["block_id"],
                 segment_id=sid,
                 score=score,
@@ -222,7 +226,7 @@ def search(
 
 
 def query_vector(model: EmbeddingModel, text: str) -> list[float]:
-    with client.make_client(model.provider) as http:
+    with make_client(model.provider) as http:
         [v] = client.embed(http, model, [text])
     return v
 
@@ -232,7 +236,7 @@ def rerank_with(
 ) -> list[float]:
     prompts = [model.prompt(instruction, query, d) for d in documents]
     out: list[float] = []
-    with client.make_client(model.provider) as http:
+    with make_client(model.provider) as http:
         for group in client.batches(prompts):
             out.extend(client.rerank(http, model, [prompts[i] for i in group]))
     return out

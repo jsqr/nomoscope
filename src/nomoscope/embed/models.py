@@ -1,35 +1,24 @@
 """Embedding and reranking models by slug, and the providers that serve them.
 
 Settings name a model by slug (`[embeddings] model`, `[search]
-rerank_model`). A provider names the environment variable that holds its
-key. Prices are dollars per token, as the provider lists them.
+rerank_model`); the providers are in `nomoscope.providers`. Prices are
+dollars per token, as the provider lists them.
 
 Qwen3-Embedding is a Matryoshka model: the first `dim` values of a vector,
 normalized again, are an embedding of their own. A query carries an
 English instruction in the model's template; a document is embedded bare.
 """
 
-import os
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from typing import Any
 
 from nomoscope.errors import NomoscopeError
+from nomoscope.providers import FIREWORKS, Provider
 
 
 class EmbedError(NomoscopeError):
     pass
-
-
-@dataclass(frozen=True)
-class Provider:
-    name: str
-    base_url: str
-    key_env: str
-
-
-FIREWORKS = Provider("fireworks", "https://api.fireworks.ai/inference/v1", "FIREWORKS_API_KEY")
-OPENROUTER = Provider("openrouter", "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY")
 
 
 @dataclass(frozen=True)
@@ -137,10 +126,3 @@ def configured(table: Mapping[str, Any]) -> EmbeddingModel:
     if unknown:
         raise EmbedError(f"[embeddings] {', '.join(unknown)}: unknown; known: dimensions, model")
     return embedding_model(table.get("model", DEFAULT_EMBEDDING), table.get("dimensions"))
-
-
-def api_key(provider: Provider) -> str:
-    key = os.environ.get(provider.key_env)
-    if not key:
-        raise EmbedError(f"set {provider.key_env} for {provider.name}")
-    return key
