@@ -27,13 +27,14 @@ jurisdictions, project specs or results. Those belong in project repos.
 | `src/nomoscope/extract/` | Extraction tasks, their units, store, run, resolvers, and the build step |
 | `src/nomoscope/catalog/` | The DuckDB catalog |
 | `src/nomoscope/search/` | Search: vectors, full text, fusion, reranking |
+| `src/nomoscope/lookup/` | Web lookup of cited law that is not loaded, and its cache |
 | `src/nomoscope/answer/` | Answers from retrieved passages; question groups that form a DAG |
 | `src/nomoscope/cli/`, `status.py`, `show.py` | The command, built with `cli.app(registry, name)` |
 | `tests/fake.py` | A fake source and cruncher for the tests |
 
 Packages import only from their own layer or below: the bottom modules,
 then `graph`, `snarf`, `pdf`, `crunch`, `derive`, `embed` and `extract`, `catalog`,
-`search`, `answer`, and the command modules. `tests/test_layering.py` checks this.
+`search`, `lookup`, `answer`, and the command modules. `tests/test_layering.py` checks this.
 
 ## Rules by stage
 

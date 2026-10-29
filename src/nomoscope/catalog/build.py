@@ -122,7 +122,8 @@ def build(cfg: Settings, project: Mapping[str, str] | None = None) -> CatalogRes
             conn.execute(view_sql(dataset, glob, DATASET_OPTIONS))
             views.append(dataset)
         for view, glob in (project or {}).items():
-            conn.execute(view_sql(view, glob))
+            # Files written before a column was added lack it.
+            conn.execute(view_sql(view, glob, ", union_by_name = true"))
             views.append(view)
         glob = coverage.table_glob(cfg)
         if glob is not None:

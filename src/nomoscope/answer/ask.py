@@ -17,6 +17,7 @@ from dataclasses import dataclass, replace
 from datetime import date
 from typing import Any
 
+from nomoscope.answer import augment as augmenting
 from nomoscope.answer import prompt, schema
 from nomoscope.answer.group import Group, Question
 from nomoscope.answer.models import AnswerError
@@ -31,9 +32,14 @@ PASSAGES = 12
 PASSAGE_TOKENS = 300
 PROMPT_TOKENS = 800
 OUTPUT_TOKENS = 1500
+# Notes per passage assumed by the estimate, and tokens per note.
+NOTES_ESTIMATED = 2
+NOTE_TOKENS = 150
 
 Retrieve = Callable[[str], list[Hit]]
 Complete = Callable[[list[dict[str, str]]], Completion]
+# Passages with notes, and what lookups spent on them.
+Augment = Callable[[list[Passage]], tuple[list[Passage], float]]
 
 
 @dataclass(frozen=True)
@@ -42,6 +48,25 @@ class Options:
     passages: int = PASSAGES
     text: bool = True
     rerank: bool = True
+    definitions: bool = False
+    references: bool = False
+    note_chars: int = augmenting.NOTE_CHARS
+    notes: int = augmenting.NOTES
+    penalties: bool = False
+    lookups: bool = False
+    lookup_limit: int = augmenting.LOOKUP_LIMIT
+
+    @property
+    def augment(self) -> augmenting.Settings:
+        return augmenting.Settings(
+            definitions=self.definitions,
+            references=self.references,
+            note_chars=self.note_chars,
+            notes=self.notes,
+            penalties=self.penalties,
+            lookups=self.lookups,
+            lookup_limit=self.lookup_limit,
+        )
 
 
 def options(table: Mapping[str, Any]) -> Options:
@@ -78,9 +103,13 @@ class Answered:
         return [p for p in self.passages if p.label in labels]
 
 
-def estimate(model: ChatModel, passages: int, questions: int) -> float:
-    tokens_in = PROMPT_TOKENS + passages * PASSAGE_TOKENS
-    return questions * model.dollars(tokens_in, OUTPUT_TOKENS)
+def estimate(
+    model: ChatModel, passages: int, questions: int, notes: bool = False, lookups: float = 0.0
+) -> float:
+    """`lookups` is the most one question's lookups may cost."""
+    per_passage = PASSAGE_TOKENS + (NOTES_ESTIMATED * NOTE_TOKENS if notes else 0)
+    tokens_in = PROMPT_TOKENS + passages * per_passage
+    return questions * (model.dollars(tokens_in, OUTPUT_TOKENS) + lookups)
 
 
 RETRY = (
@@ -99,8 +128,13 @@ def ask(
     retrieve: Retrieve,
     complete: Complete,
     ancestors: Sequence[Question] = (),
+    augment: Augment | None = None,
 ) -> Answered:
-    found = tuple(prompt.passages(retrieve(prompt.retrieval_query(q, ancestors))))
+    found = prompt.passages(retrieve(prompt.retrieval_query(q, ancestors)))
+    looked_up = 0.0
+    if augment is not None:
+        found, looked_up = augment(found)
+    found = tuple(found)
     labels = {p.label for p in found}
     sent = prompt.messages(q, priors, found, jurisdiction)
     tokens_in = tokens_out = 0
@@ -121,11 +155,11 @@ def ask(
             continue
         return Answered(
             q, jurisdiction, on, model.slug, found, response, None,
-            tokens_in, tokens_out, model.dollars(tokens_in, tokens_out),
+            tokens_in, tokens_out, model.dollars(tokens_in, tokens_out) + looked_up,
         )  # fmt: skip
     return Answered(
         q, jurisdiction, on, model.slug, found, None, error,
-        tokens_in, tokens_out, model.dollars(tokens_in, tokens_out),
+        tokens_in, tokens_out, model.dollars(tokens_in, tokens_out) + looked_up,
     )  # fmt: skip
 
 
@@ -151,13 +185,15 @@ def ask_group(
     retrieve: Retrieve,
     complete: Complete,
     spend: float,
+    augment: Augment | None = None,
+    lookups: float = 0.0,
 ) -> GroupRun:
     """Every question in order, while the spend lasts."""
     done: dict[str, Answered] = {}
     left = spend
     order = g.order()
     for i, q in enumerate(order):
-        if estimate(model, passages, 1) > left:
+        if estimate(model, passages, 1, notes=augment is not None, lookups=lookups) > left:
             return GroupRun(jurisdiction, tuple(done.values()), tuple(order[i:]))
         ancestors = g.ancestors(q.id)
         priors = [
@@ -168,6 +204,7 @@ def ask_group(
         answered = ask(
             q, priors, jurisdiction, on,
             model=model, retrieve=retrieve, complete=complete, ancestors=ancestors,
+            augment=augment,
         )  # fmt: skip
         done[q.id] = answered
         left -= answered.dollars

@@ -648,6 +648,7 @@ answers/group=<name>/jurisdiction=<j>/<time>-<writer>.parquet
   run_id, group, group_sha256, question_id, question, after, jurisdiction,
   on_date, model, answer, rationale, confidence, citations,
   passages (label, law_version_id, segment_id, citation, score),
+  notes (label, kind, id, given_under),
   input_tokens, output_tokens, dollars, asked_at, error
 ```
 
@@ -662,6 +663,111 @@ reads them all.
 | `passages` | 12 |
 | `text` | true |
 | `rerank` | true |
+| `definitions` | false: add definition notes |
+| `references` | false: add notes for cited provisions |
+| `penalties` | false: add notes for penalties that apply |
+| `lookups` | false: look up unloaded citations on the web |
+| `lookup_limit` | 4: most new lookups per question |
+| `note_chars` | 1200: longest note text |
+| `notes` | 8: most notes per passage |
+
+### Notes
+
+With `definitions`, `penalties`, or `references` on, each passage is
+followed by notes read from the extracted datasets on the question's date
+(`src/nomoscope/answer/augment.py`):
+
+```
+Defined terms used in this passage:
+- "Lot" (municipal 1-2, applies to Chapter 1 General Provisions): "Lot" means a parcel of land.
+
+Provisions this passage cites:
+- municipal 1-4 (cited as "Section 1-4"): A fence on a corner lot may not exceed three feet...
+```
+
+A definition is noted when its term appears in the passage and its scope
+covers the passage's section. A definition with no scope applies only in
+its own section. When two definitions of one term apply, the narrower
+scope wins. A definition the passage already prints is not noted.
+
+A penalty is noted when its scope covers the passage's section, by the
+same test. A general penalty covers its code; a penalty with no scope
+covers only its own section. All that apply are noted, narrowest first,
+under "Penalties that apply to this passage:", each named from its
+extracted fields ("Violation; fine up to $250 per day"). Penalties already
+given under an earlier passage are one line, "The penalties given under
+[P1] also apply".
+
+A citation is noted when it lies in the passage and resolved to a section,
+a subdivision, or a heading. Its target's text is the text in force on the
+question's date. A cited heading is named without its text. Citations of the
+passage's own section or of a heading above it ("this article"), and
+ranges, are skipped.
+
+A note's text appears once, under the first passage that needs it. Later
+passages get a pointer such as `- "Lot": defined under [P1]`. The `notes`
+column records each note with its passage's label and, for a pointer, the
+label it points to.
+
+### Lookups
+
+With `lookups` on, a citation in the passage of a section or subdivision
+whose code is not loaded (`target_status` `unloaded`) gets the text a web
+lookup finds (`src/nomoscope/lookup/`):
+
+1. The cache is read first, and a cached miss counts too.
+2. Tavily is searched for the citation's Bluebook form, or for the citation
+   as written after the cited jurisdiction's name. The first search is
+   limited to `[lookups] domains`; if no page yields the provision, a second
+   search is open to any domain. A result page whose text is short (some
+   sites give a search only a line) is read whole through Tavily's
+   extraction.
+3. The `[lookups] model` reads one result page at a time, cut to 40,000
+   characters around the section number, and gives the first and last dozen
+   words of the cited section or subdivision as the page prints them.
+4. Both must be found in the page (exact, or a close window at 0.8), the
+   end after the start, and the start must begin with the section number or
+   the subdivision's enumerator. A section number in a title line just above
+   the start also counts, if no numbered line comes between them. An
+   enumerator such as "(10)" is not a section number. The note uses the
+   page's own text from start to end, so nothing the model wrote reaches the
+   prompt, and a long section costs no more than a short one.
+
+```
+lookups/jurisdiction=<j>/<time>-<writer>.parquet
+  target_id, query, found, url, title, scope, text, model,
+  input_tokens, output_tokens, searches, extracts, dollars, looked_at, version
+```
+
+`<j>` is the cited law's jurisdiction, so one lookup serves every code that
+cites it. Found or not, the result is cached and the latest row per target
+is used. A row recorded under an older `version` of the excerpt prompt and
+check is ignored, so the target is looked up again. A search that failed is not cached. Each question runs at most
+`lookup_limit` new lookups; past that, only the cache is read. A lookup note
+names its source and says the text is current, not as of the question's
+date:
+
+```
+- Ill. Town Law § 130(a) (cited as "Town Law § 130(a)"; current text from law.justia.com, retrieved 2026-10-30): ...
+```
+
+Lookup costs, searches and excerpt tokens, are added to each answer's
+`dollars`. The estimate allows `lookup_limit` lookups per question at their
+most: two searches, two extractions, and an excerpt of every result page.
+
+| `[lookups]` key | default |
+| --- | --- |
+| `model` | none: a chat model slug |
+| `domains` | law.justia.com, law.cornell.edu, codes.findlaw.com |
+| `results` | 3 per search |
+| `dollars_per_search` | 0.008 (Tavily's basic search) |
+| `dollars_per_extract` | 0.008 (Tavily's basic extraction, up to five pages) |
+
+The key is `TAVILY_API_KEY`.
+
+A jurisdiction missing `definitions`, `penalties`, or
+`cross_references` stops with an error naming the `extract` command that
+builds it.
 
 ## The catalog
 

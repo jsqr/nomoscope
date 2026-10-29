@@ -22,7 +22,9 @@ class Response(BaseModel):
     rationale: str = Field(
         description="Why the passages give this answer, citing them by label, as [P2]."
     )
-    citations: list[str] = Field(description="The labels of the passages the answer rests on.")
+    citations: list[str] = Field(
+        description='The labels of the passages the answer rests on, without brackets, as "P2".'
+    )
     confidence: float = Field(
         description="The probability, from 0 to 1, that the answer is right given the passages."
     )
@@ -41,6 +43,8 @@ def parse(content: str, labels: Collection[str]) -> Response:
         raise AnswerError(f"the reply does not fit the response schema: {e}") from e
     if not 0 <= found.confidence <= 1:
         raise AnswerError(f"confidence {found.confidence} is not between 0 and 1")
+    # The rationale cites "[P2]", and models carry the brackets over.
+    found = found.model_copy(update={"citations": [c.strip(" []") for c in found.citations]})
     unknown = [c for c in found.citations if c not in labels]
     if unknown:
         raise AnswerError(f"the reply cites passages not supplied: {', '.join(unknown)}")

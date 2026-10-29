@@ -26,6 +26,7 @@ LAYERS = [
     {"embed", "extract"},
     {"catalog"},
     {"search"},
+    {"lookup"},
     {"answer"},
     {"cli", "status", "show"},
 ]

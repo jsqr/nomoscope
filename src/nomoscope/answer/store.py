@@ -31,6 +31,7 @@ PASSAGE = pl.Struct(
         "score": pl.Float64,
     }
 )
+NOTE = pl.Struct({"label": pl.String, "kind": pl.String, "id": pl.String, "given_under": pl.String})
 SCHEMA = pl.Schema(
     {
         "run_id": pl.String,
@@ -47,6 +48,8 @@ SCHEMA = pl.Schema(
         "confidence": pl.Float64,
         "citations": pl.List(pl.String),
         "passages": pl.List(PASSAGE),
+        # The notes under each passage. Files written before notes lack the column.
+        "notes": pl.List(NOTE),
         "input_tokens": pl.Int64,
         "output_tokens": pl.Int64,
         "dollars": pl.Float64,
@@ -88,6 +91,16 @@ def rows(g: Group, run: GroupRun, run_id: str, asked_at: datetime) -> pl.DataFra
                         "score": p.hit.score,
                     }
                     for p in a.passages
+                ],
+                "notes": [
+                    {
+                        "label": p.label,
+                        "kind": n.note.kind,
+                        "id": n.note.id,
+                        "given_under": n.given_under,
+                    }
+                    for p in a.passages
+                    for n in p.notes
                 ],
                 "input_tokens": a.input_tokens,
                 "output_tokens": a.output_tokens,

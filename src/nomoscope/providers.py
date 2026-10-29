@@ -45,6 +45,8 @@ class Provider:
 FIREWORKS = Provider("fireworks", "https://api.fireworks.ai/inference/v1", "FIREWORKS_API_KEY")
 OPENROUTER = Provider("openrouter", "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY")
 PROVIDERS = {p.name: p for p in (FIREWORKS, OPENROUTER)}
+# Web search, for citations of law that is not loaded.
+TAVILY = Provider("tavily", "https://api.tavily.com", "TAVILY_API_KEY")
 
 
 def api_key(provider: Provider) -> str:
@@ -82,17 +84,18 @@ def post(
     jitter: Callable[[], float] = random.random,
 ) -> dict[str, Any]:
     """POST `path`, retrying throttles and server errors. Returns the body."""
+    what = payload.get("model", path)
     response = client.post(path, json=payload)
     for attempt in range(1, attempts):
         if response.status_code not in RETRY_STATUS:
             break
         wait = retry_wait(response, attempt, jitter)
-        log.debug("%s HTTP %d, retrying in %.0fs", payload["model"], response.status_code, wait)
+        log.debug("%s HTTP %d, retrying in %.0fs", what, response.status_code, wait)
         sleep(wait)
         response = client.post(path, json=payload)
     if response.status_code != 200:
         raise ProviderError(
-            f"{payload['model']}: HTTP {response.status_code}: {response.text}",
+            f"{what}: HTTP {response.status_code}: {response.text}",
             response.status_code,
         )
     return response.json()

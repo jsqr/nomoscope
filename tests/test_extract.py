@@ -1,7 +1,3 @@
-import json
-import os
-from pathlib import Path
-
 import polars as pl
 import pytest
 
@@ -27,6 +23,7 @@ from nomoscope.extract.citations import Cited
 from nomoscope.graph.store import Store
 from nomoscope.providers import ProviderError
 from tests import fake
+from tests.extracting import configure, reply
 from tests.pipeline import P1, P2, P3, crunch, derive, publish
 
 pytestmark = pytest.mark.usefixtures("conventions")
@@ -63,19 +60,6 @@ def windytown(cfg, tmp_path) -> rows.Rows:
     found = rows.load(cfg, J)
     assert found is not None
     return found
-
-
-def configure(**tables: dict[str, str]) -> settings.Settings:
-    path = Path(os.environ[settings.env_config(fake.APP)])
-    lines = [
-        f"[{name}]\n{''.join(f'{k} = {v!r}\n' for k, v in t.items())}" for name, t in tables.items()
-    ]
-    path.write_text(path.read_text() + "".join(lines).replace("'", '"'))
-    return settings.load(fake.APP)
-
-
-def reply(items: dict) -> chat.Completion:
-    return chat.Completion(json.dumps(items), 100, 50)
 
 
 def definitions_reply(messages: list[dict[str, str]]) -> chat.Completion:

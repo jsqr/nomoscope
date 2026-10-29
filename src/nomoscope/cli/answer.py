@@ -7,11 +7,13 @@ from functools import partial
 from pathlib import Path
 from typing import Annotated
 
+import duckdb
 import httpx
 import typer
 
 from nomoscope import chat
 from nomoscope.answer import ask as asking
+from nomoscope.answer import augment as augmenting
 from nomoscope.answer import group, schema, store
 from nomoscope.answer.ask import GroupRun
 from nomoscope.catalog import build as catalog
@@ -19,7 +21,10 @@ from nomoscope.chat import ChatModel, Completion
 from nomoscope.cli.common import catalog_views, fail, load_settings
 from nomoscope.crunch.registry import Registry
 from nomoscope.errors import NomoscopeError
-from nomoscope.providers import make_client
+from nomoscope.extract import rows
+from nomoscope.lookup import excerpt, tavily
+from nomoscope.lookup import run as looking
+from nomoscope.providers import TAVILY, make_client
 from nomoscope.search import query as searching
 
 
@@ -62,10 +67,18 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
             chosen = asking.options(cfg.table("answers"))
             model = chat.lookup(registry.chat_models, chosen.model, "[answers] model")
             g = group.load(group_file) if group_file else group.single(question or "")
+            augmenting.check(cfg, chosen.augment, jurisdiction)
+            found_by = (
+                looking.settings(cfg.table("lookups"), registry.chat_models)
+                if chosen.lookups
+                else None
+            )
         except NomoscopeError as e:
             raise fail(str(e)) from e
         order = g.order()
-        each = asking.estimate(model, chosen.passages, len(order))
+        notes = chosen.augment.on
+        lookups = chosen.lookup_limit * looking.estimate(found_by) if found_by else 0.0
+        each = asking.estimate(model, chosen.passages, len(order), notes, lookups)
         if spend <= 0:
             typer.echo(f"{g.name}: {' -> '.join(q.id for q in order)}")
             typer.echo(
@@ -75,7 +88,22 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
             return
         left = spend
         http: httpx.Client | None = None
+        conn: duckdb.DuckDBPyConnection | None = None
+        clients: list[httpx.Client] = []
+        lookup = None
         try:
+            if notes:
+                conn = catalog.connect(cfg)
+            if found_by is not None:
+                clients = [make_client(TAVILY), make_client(found_by.model.provider)]
+                excerpt_schema = excerpt.Reply.model_json_schema()
+                lookup = partial(
+                    looking.lookup, cfg, found_by,
+                    partial(tavily.search, clients[0]),
+                    partial(tavily.extract, clients[0]),
+                    lambda m: chat.complete(clients[1], found_by.model, m, excerpt_schema),
+                    getpass.getuser(),
+                )  # fmt: skip
             http = make_client(model.provider)
             complete = partial(_complete, http, model)
             for j in jurisdiction:
@@ -83,9 +111,18 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
                     searching.search, cfg, jurisdiction=j, on=when,
                     text=chosen.text, rerank=chosen.rerank, limit=chosen.passages,
                 )  # fmt: skip
+                augment = (
+                    partial(
+                        augmenting.augment, conn, j, when, chosen.augment,
+                        lookup=lookup, place_name=partial(rows.name_of, cfg),
+                    )
+                    if conn
+                    else None
+                )  # fmt: skip
                 run = asking.ask_group(
                     g, j, when, model=model, passages=chosen.passages,
-                    retrieve=retrieve, complete=complete, spend=left,
+                    retrieve=retrieve, complete=complete, spend=left, augment=augment,
+                    lookups=lookups,
                 )  # fmt: skip
                 left -= run.dollars
                 store.write(cfg, g, run, getpass.getuser())
@@ -101,8 +138,11 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         except NomoscopeError as e:
             raise fail(str(e)) from e
         finally:
-            if http is not None:
-                http.close()
+            for c in [http, *clients]:
+                if c is not None:
+                    c.close()
+            if conn is not None:
+                conn.close()
         typer.echo(f"spent about ${spend - left:.4f}", err=True)
 
 

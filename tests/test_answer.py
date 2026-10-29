@@ -83,6 +83,13 @@ def test_a_reply_is_parsed_and_checked_against_the_passages():
         schema.parse(high, {"P1"})
 
 
+def test_bracketed_citations_are_read_as_labels():
+    reply = json.dumps({**json.loads(reply_json("Yes.")), "citations": ["[P1]", " P2 "]})
+    assert schema.parse(reply, {"P1", "P2"}).citations == ["P1", "P2"]
+    with pytest.raises(models.AnswerError, match="not supplied: P9"):
+        schema.parse(json.dumps({**json.loads(reply), "citations": ["[P9]"]}), {"P1"})
+
+
 def test_cost_is_priced_per_token():
     assert GLM.dollars(1_000_000, 1_000_000) == pytest.approx(1.4 + 4.4)
     with pytest.raises(chat.ChatError, match="known: glm-5-3-low"):
