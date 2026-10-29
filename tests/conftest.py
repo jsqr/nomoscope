@@ -8,6 +8,13 @@ from tests import fake
 
 
 @pytest.fixture(autouse=True)
+def no_provider_keys(monkeypatch):
+    """Tests run as on a machine with no keys; a test that needs one sets a fake."""
+    for var in ("FIREWORKS_API_KEY", "OPENROUTER_API_KEY", "MISTRAL_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def scratch_settings(monkeypatch, tmp_path_factory):
     """Point every test at a scratch data root."""
     monkeypatch.delenv(settings.env_data_root(fake.APP), raising=False)

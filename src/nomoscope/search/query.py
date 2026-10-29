@@ -4,6 +4,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date
 from functools import partial
+from pathlib import Path
 from typing import Any
 
 import duckdb
@@ -89,11 +90,21 @@ def candidates(conn: duckdb.DuckDBPyConnection, jurisdiction: str, on: date) -> 
     return conn.sql(CANDIDATES, params={"jurisdiction": jurisdiction, "on": on}).pl()
 
 
+def stored(cfg: Settings, model: EmbeddingModel, jurisdiction: str) -> list[Path]:
+    """The jurisdiction's vector files. Raises if there are none."""
+    files = store.files(cfg, model, jurisdiction)
+    if not files:
+        raise SearchError(
+            f"{jurisdiction}: no vectors for {model.key}; run embed, or search with"
+            " --no-vector --text"
+        )
+    return files
+
+
 def vector_ranked(
     conn: duckdb.DuckDBPyConnection,
-    cfg: Settings,
     model: EmbeddingModel,
-    jurisdiction: str,
+    files: Sequence[Path],
     found: pl.DataFrame,
     vector: list[float],
     depth: int,
@@ -102,12 +113,6 @@ def vector_ranked(
 
     Stored vectors are unit length, so this is cosine similarity.
     """
-    files = store.files(cfg, model, jurisdiction)
-    if not files:
-        raise SearchError(
-            f"{jurisdiction}: no vectors for {model.key}; run embed, or search with"
-            " --no-vector --text"
-        )
     conn.register("candidates", found.select("segment_id", "content_sha256"))
     # Parquet keeps the vectors as lists; the cast makes them fixed-width arrays.
     width = f"FLOAT[{model.dim}]"
@@ -159,10 +164,12 @@ def search(
             return []
         lists: dict[str, list[tuple[str, float]]] = {}
         if vector:
+            # Checked before the query is embedded, which is a billed call.
+            files = stored(cfg, model, jurisdiction)
             v = (vectorize or partial(query_vector, model))(
                 model.query_text(chosen.instruction, query)
             )
-            lists["vector"] = vector_ranked(conn, cfg, model, jurisdiction, found, v, chosen.depth)
+            lists["vector"] = vector_ranked(conn, model, files, found, v, chosen.depth)
     finally:
         conn.close()
     if text:

@@ -80,9 +80,9 @@ def test_full_text_alone_needs_no_vectors(three):
     assert hits[0].section_num == "2-1" and hits[0].text is not None and hits[0].vector is None
 
 
-def test_without_vectors_the_error_names_embed(three):
+def test_without_vectors_the_error_names_embed_and_no_query_is_embedded(three):
     with pytest.raises(query.SearchError, match="run embed"):
-        query.search(three, "dogs", J, vectorize=lambda t: axis(0))
+        query.search(three, "dogs", J, vectorize=lambda t: pytest.fail("embedded a query"))
 
 
 def test_fusion_adds_reciprocal_ranks():
