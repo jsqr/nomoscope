@@ -1,7 +1,8 @@
 """The registry: a project's sources and crunchers, by name, and what else
 nomoscope needs to know about the project: the routes from records to
 crunchers, the segment settings derive uses, the directory of drafting
-conventions, a reader of publishers' listings for `coverage match`, the
+conventions, the chat models the project calls, the directory of citation
+name tables, a reader of publishers' listings for `coverage match`, the
 project's own tables that the catalog shows as views, and the project's
 committed settings file with the tables it may hold.
 
@@ -15,6 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from nomoscope.chat import ChatModel
 from nomoscope.coverage import Listing
 from nomoscope.crunch import CrunchError
 from nomoscope.crunch.results import CrunchResult
@@ -57,6 +59,9 @@ class Registry:
     routes: Routes = ()
     segments: SegmentSettings = DEFAULT_SEGMENTS
     conventions: Path | None = None
+    chat_models: Mapping[str, ChatModel] = field(default_factory=dict)
+    # See extract/names.py.
+    citations: Path | None = None
     listings: Callable[[Settings], list[Listing]] | None = None
     # View name -> parquet glob relative to the data root, for tables the project keeps.
     views: Callable[[Settings], Mapping[str, str]] | None = None

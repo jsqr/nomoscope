@@ -7,6 +7,7 @@ import typer
 from nomoscope import settings
 from nomoscope.answer import store as answers
 from nomoscope.crunch.registry import Registry
+from nomoscope.extract import build as extracted
 from nomoscope.settings import Settings
 
 
@@ -24,8 +25,9 @@ def load_settings(name: str, registry: Registry) -> Settings:
 
 
 def catalog_views(cfg: Settings, registry: Registry) -> dict[str, str]:
-    """The views the catalog adds to its own: the project's tables and the stored answers."""
-    return {**registry.project_views(cfg), **answers.views(cfg)}
+    """The views the catalog adds to its own: the project's tables, the stored
+    answers, and the extracted datasets."""
+    return {**registry.project_views(cfg), **answers.views(cfg), **extracted.views(cfg)}
 
 
 def parse_params(pairs: list[str]) -> dict[str, str]:

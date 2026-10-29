@@ -17,12 +17,14 @@ jurisdictions, project specs or results. Those belong in project repos.
 | Path | Contents |
 | --- | --- |
 | `src/nomoscope/{errors,parquet,partition,providers,settings}.py` | Errors, parquet writes, partition paths, model providers, settings |
+| `src/nomoscope/chat.py` | Chat models and a completion that returns JSON fitting a schema |
 | `src/nomoscope/graph/` | The graph store: records, steps, and staleness |
 | `src/nomoscope/snarf/` | Sources, feeds, fetching, and local import |
 | `src/nomoscope/pdf/` | A PDF's text layer, outline, and OCR, read as lines with layout features |
 | `src/nomoscope/crunch/` | The registry, routing, the tabulated schemas, and the runner |
 | `src/nomoscope/derive/` | The ledger, the datasets, conventions, parsers, segments, and the build step |
 | `src/nomoscope/embed/` | Embedding and reranking models, the provider client, the vector store |
+| `src/nomoscope/extract/` | Extraction tasks, their units, store, run, resolvers, and the build step |
 | `src/nomoscope/catalog/` | The DuckDB catalog |
 | `src/nomoscope/search/` | Search: vectors, full text, fusion, reranking |
 | `src/nomoscope/answer/` | Answers from retrieved passages; question groups that form a DAG |
@@ -30,7 +32,7 @@ jurisdictions, project specs or results. Those belong in project repos.
 | `tests/fake.py` | A fake source and cruncher for the tests |
 
 Packages import only from their own layer or below: the bottom modules,
-then `graph`, `snarf`, `pdf`, `crunch`, `derive`, `embed`, `catalog`,
+then `graph`, `snarf`, `pdf`, `crunch`, `derive`, `embed` and `extract`, `catalog`,
 `search`, `answer`, and the command modules. `tests/test_layering.py` checks this.
 
 ## Rules by stage
@@ -61,8 +63,8 @@ root, and is rebuilt whole.
   for one tabulate step per record. A project adds its own commands to the
   typer app that `cli.app` returns.
 - In the same registry: the routes from records to crunchers, the segment
-  settings, a directory of drafting conventions, and the project's tables
-  to show in the catalog.
+  settings, a directory of drafting conventions, the chat models it calls
+  by slug, and the project's tables to show in the catalog.
 
 `tests/fake.py` is the smallest example.
 
@@ -73,7 +75,8 @@ page. An agent runs it only with `--dry-run`, which prints the page and
 request count, and leaves the paid run to a person. `embed --spend` and
 `search --rerank` are billed per token; an agent runs `embed` without
 `--spend`, which only estimates, searches without `--rerank`, and runs
-`ask` without `--spend`, unless a person approves the cost. Tests never call a model.
+`ask` and `extract` without `--spend`, unless a person approves the cost.
+Tests never call a model.
 
 ## The graph store
 

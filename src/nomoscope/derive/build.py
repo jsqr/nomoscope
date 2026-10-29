@@ -38,7 +38,7 @@ from nomoscope.settings import Settings
 log = logging.getLogger(__name__)
 
 # Bump when the same tabulated tables give different datasets.
-VERSION = "4"
+VERSION = "5"
 FOLD = "fold"
 REFOLD = "refold"
 
@@ -199,6 +199,7 @@ def load_tabulated(cfg: Settings, source: str, tables: Iterable[steps.TableRow])
         sessions=frames.get(tabulated_schemas.SESSIONS),
         codes=frames.get(tabulated_schemas.LAW_CODES),
         attachments=frames.get(tabulated_schemas.LAW_ATTACHMENTS),
+        notes=frames.get(tabulated_schemas.LAW_NOTES),
     )
 
 

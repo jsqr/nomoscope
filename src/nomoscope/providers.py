@@ -29,7 +29,10 @@ MAX_WAIT = 60.0
 
 
 class ProviderError(NomoscopeError):
-    pass
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
+        # None when no HTTP reply was refused, e.g. a missing key.
+        self.status = status
 
 
 @dataclass(frozen=True)
@@ -41,6 +44,7 @@ class Provider:
 
 FIREWORKS = Provider("fireworks", "https://api.fireworks.ai/inference/v1", "FIREWORKS_API_KEY")
 OPENROUTER = Provider("openrouter", "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY")
+PROVIDERS = {p.name: p for p in (FIREWORKS, OPENROUTER)}
 
 
 def api_key(provider: Provider) -> str:
@@ -87,5 +91,8 @@ def post(
         sleep(wait)
         response = client.post(path, json=payload)
     if response.status_code != 200:
-        raise ProviderError(f"{payload['model']}: HTTP {response.status_code}: {response.text}")
+        raise ProviderError(
+            f"{payload['model']}: HTTP {response.status_code}: {response.text}",
+            response.status_code,
+        )
     return response.json()

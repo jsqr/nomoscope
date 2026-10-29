@@ -6,6 +6,7 @@
     us-il-chicago/node/municipal/4.60                      a heading
     us-il-chicago/law/municipal/4-60-010/3f2a9c1d07e4/b/1  a subdivision
     us-il-chicago/law/municipal/4-60-010/3f2a9c1d07e4/history/9b1e0c44d2a7  a history note
+    us-il-chicago/law/municipal/4-60-010/note/5c0e7d21a9f3  a note printed with a section
 
 A version id ends with the first 12 hex digits of its text's hash. The
 source's version id, if any, comes before the hash.
@@ -55,3 +56,7 @@ def law_node(jurisdiction: str, code: pl.Expr, treepath: pl.Expr) -> pl.Expr:
 
 def law_history(version: pl.Expr, history_sha256: pl.Expr) -> pl.Expr:
     return join(version, "history", history_sha256.str.slice(0, HASH_CHARS))
+
+
+def law_note(target: pl.Expr, note_sha256: pl.Expr) -> pl.Expr:
+    return join(target, "note", note_sha256.str.slice(0, HASH_CHARS))

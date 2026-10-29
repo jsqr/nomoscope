@@ -30,6 +30,9 @@ CRUNCH = "crunch"
 TABULATE = "tabulate"
 DERIVE = "derive"
 REFERENCE = "reference"
+EXTRACT = "extract"
+# An extraction store as an input; not a step.
+EXTRACTIONS = "extractions"
 # A config file read by a step; not a step itself.
 CONFIG = "config"
 

@@ -11,6 +11,7 @@ from nomoscope.cli.jurisdictions import FETCH
 from nomoscope.crunch.registry import Registry
 from nomoscope.derive import build, reference
 from nomoscope.errors import NomoscopeError
+from nomoscope.extract import build as extracted
 from nomoscope.graph.store import Store
 from nomoscope.settings import Settings
 
@@ -24,7 +25,10 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         ] = None,
         force: Annotated[bool, typer.Option(help="Refold even if fresh")] = False,
     ) -> None:
-        """Build the derived datasets that are stale, then the catalog."""
+        """Build the derived datasets that are stale, then the catalog.
+
+        A task's extracted dataset is built once its units are all extracted.
+        """
         cfg = load_settings(name, registry)
         try:
             store = Store(cfg)
@@ -32,6 +36,9 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
                 *reference.build(cfg, store, force=force),
                 *build.build(cfg, store, registry, jurisdiction, force=force),
             ]
+            results += extracted.build(
+                cfg, store, registry.chat_models, registry.citations, jurisdiction, force=force
+            )
         except NomoscopeError as e:
             raise fail(str(e)) from e
         if not reference.census_records(cfg):

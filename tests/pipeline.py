@@ -12,7 +12,9 @@ P1 = """\
 publication 2024-01-15
 edition Supp. No. 1
 node 1 | Chapter 1 | General Provisions
+note publisher | Editor's note: Ord. 2019-12 adopted this chapter.
 section 1-1 | Title | Ord. 2019-12, passed 12-3-2019, eff. 1-1-2020
+note running | Windytown Code, Supp. No. 1
 This code is the Windytown Code.
 section 1-2 | Definitions | Ord. 2019-12, eff. 1-1-2020
 (a) "City" means Windytown.
@@ -36,7 +38,9 @@ P3 = """\
 publication 2025-01-10
 edition Supp. No. 3
 node 1 | Chapter 1 | General Provisions
+note publisher | Editor's note: Ord. 2019-12 adopted this chapter.
 section 1-1 | Title | Ord. 2019-12, passed 12-3-2019, eff. 1-1-2020
+note running | Windytown Code, Supp. No. 3
 This code is the Windytown Code.
 section 1-2 | Definitions | Ord. 2019-12; Ord. 2024-5, passed 5-1-2024, eff. 6-1-2024
 (a) "City" means the City of Windytown.

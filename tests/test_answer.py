@@ -5,10 +5,19 @@ import httpx
 import polars as pl
 import pytest
 
-from nomoscope.answer import ask, client, group, models, prompt, schema, store
+from nomoscope import chat
+from nomoscope.answer import ask, group, models, prompt, schema, store
+from nomoscope.providers import FIREWORKS
 from nomoscope.search.query import Hit
 
-GLM = models.chat_model("glm-5-3-low")
+GLM = chat.ChatModel(
+    "glm-5-3-low",
+    FIREWORKS,
+    "accounts/fireworks/models/glm-5p3",
+    1.4e-6,
+    4.4e-6,
+    settings={"reasoning_effort": "low"},
+)
 
 
 def transport(handler) -> httpx.Client:
@@ -40,7 +49,7 @@ def test_the_request_asks_for_the_schema_and_the_models_effort():
 
     messages = [{"role": "user", "content": "q"}]
     with transport(handler) as c:
-        out = client.complete(c, GLM, messages, schema.json_schema())
+        out = chat.complete(c, GLM, messages, schema.json_schema())
     assert seen["model"] == "accounts/fireworks/models/glm-5p3"
     assert seen["reasoning_effort"] == "low" and seen["temperature"] == 0.0
     assert seen["messages"] == messages
@@ -56,8 +65,8 @@ def test_the_request_asks_for_the_schema_and_the_models_effort():
 
 
 def test_an_empty_reply_is_an_error():
-    with transport(reply("")) as c, pytest.raises(models.AnswerError, match="empty reply"):
-        client.complete(c, GLM, [], {})
+    with transport(reply("")) as c, pytest.raises(chat.ChatError, match="empty reply"):
+        chat.complete(c, GLM, [], {})
 
 
 def test_a_reply_is_parsed_and_checked_against_the_passages():
@@ -76,8 +85,10 @@ def test_a_reply_is_parsed_and_checked_against_the_passages():
 
 def test_cost_is_priced_per_token():
     assert GLM.dollars(1_000_000, 1_000_000) == pytest.approx(1.4 + 4.4)
-    with pytest.raises(models.AnswerError, match="known: glm-5-3-low"):
-        models.chat_model("nope")
+    with pytest.raises(chat.ChatError, match="known: glm-5-3-low"):
+        chat.lookup({GLM.slug: GLM}, "nope", "[answers] model")
+    with pytest.raises(chat.ChatError, match=r"\[answers\] model is not set"):
+        chat.lookup({GLM.slug: GLM}, "", "[answers] model")
 
 
 def group_file(tmp_path, text: str, name: str = "paraphernalia.toml"):
@@ -162,7 +173,7 @@ def answering(*contents: str):
 
     def complete(messages):
         sent.append(messages)
-        return client.Completion(next(replies), 1000, 100)
+        return chat.Completion(next(replies), 1000, 100)
 
     return complete, sent
 
@@ -276,3 +287,22 @@ def test_answer_settings_are_checked():
         ask.options({"passages": "8"})
     with pytest.raises(models.AnswerError, match="modle: unknown"):
         ask.options({"modle": "x"})
+
+
+def test_chat_models_load_from_a_file(tmp_path):
+    path = tmp_path / "models.toml"
+    path.write_text(
+        '["glm-5-3-low"]\nprovider = "fireworks"\nname = "accounts/fireworks/models/glm-5p3"\n'
+        "dollars_per_input_token = 1.4e-6\ndollars_per_output_token = 4.4e-6\n"
+        'settings = { reasoning_effort = "low" }\n'
+    )
+    assert chat.load(path) == {"glm-5-3-low": GLM}
+    path.write_text(
+        '["x"]\nprovider = "acme"\nname = "x"\n'
+        "dollars_per_input_token = 1\ndollars_per_output_token = 1\n"
+    )
+    with pytest.raises(chat.ChatError, match="unknown provider 'acme'"):
+        chat.load(path)
+    path.write_text('["x"]\nprovider = "fireworks"\nnmae = "x"\n')
+    with pytest.raises(chat.ChatError, match="unknown keys nmae"):
+        chat.load(path)

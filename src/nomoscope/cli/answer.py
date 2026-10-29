@@ -10,12 +10,12 @@ from typing import Annotated
 import httpx
 import typer
 
+from nomoscope import chat
 from nomoscope.answer import ask as asking
-from nomoscope.answer import client, group, schema, store
+from nomoscope.answer import group, schema, store
 from nomoscope.answer.ask import GroupRun
-from nomoscope.answer.client import Completion
-from nomoscope.answer.models import ChatModel, chat_model
 from nomoscope.catalog import build as catalog
+from nomoscope.chat import ChatModel, Completion
 from nomoscope.cli.common import catalog_views, fail, load_settings
 from nomoscope.crunch.registry import Registry
 from nomoscope.errors import NomoscopeError
@@ -60,7 +60,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
             raise fail(f"--on: {e}") from e
         try:
             chosen = asking.options(cfg.table("answers"))
-            model = chat_model(chosen.model)
+            model = chat.lookup(registry.chat_models, chosen.model, "[answers] model")
             g = group.load(group_file) if group_file else group.single(question or "")
         except NomoscopeError as e:
             raise fail(str(e)) from e
@@ -107,7 +107,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
 
 
 def _complete(http: httpx.Client, model: ChatModel, messages: list[dict[str, str]]) -> Completion:
-    return client.complete(http, model, messages, schema.json_schema())
+    return chat.complete(http, model, messages, schema.json_schema())
 
 
 def show(run: GroupRun, output: str) -> None:

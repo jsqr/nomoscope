@@ -57,6 +57,7 @@ NODE_PAYLOAD = (
     "part_code",
 )
 ANCESTOR_KEY = ("law_code", "descendant_id", "ancestor_id", "depth")
+NOTE_KEY = ("law_code", "section_num", "node_treepath", "kind", "text")
 LINE_INDENTS = pl.List(pl.Int64)
 
 PUBLICATION_SCHEMA = pl.Schema(
@@ -192,6 +193,19 @@ ANCESTOR_SCHEMA = pl.Schema(
         **ABSENT,
     }
 )
+NOTE_SCHEMA = pl.Schema(
+    {
+        "id": pl.String,
+        "target_id": pl.String,
+        "jurisdiction": pl.String,
+        "law_code": pl.String,
+        "section_num": pl.String,
+        "node_treepath": pl.String,
+        "kind": pl.String,
+        "text": pl.String,
+        **SEEN,
+    }
+)
 SUBDIVISION_SCHEMA = pl.Schema(
     {
         "id": pl.String,
@@ -252,6 +266,7 @@ SCHEMAS = {
     registry.LAW_ANCESTORS: ANCESTOR_SCHEMA,
     registry.LAW_SUBDIVISIONS: SUBDIVISION_SCHEMA,
     registry.SEGMENTS: SEGMENT_SCHEMA,
+    registry.LAW_NOTES: NOTE_SCHEMA,
 }
 CONTEXT_SEP = " > "
 
@@ -272,6 +287,7 @@ class Tabulated:
     sessions: pl.DataFrame | None = None
     codes: pl.DataFrame | None = None
     attachments: pl.DataFrame | None = None
+    notes: pl.DataFrame | None = None
 
 
 @dataclass(frozen=True)
@@ -286,6 +302,7 @@ class Ledgers:
     # Not versioned: each publication's rows, the latest publication's kept.
     codes: pl.DataFrame | None = None
     attachments: pl.DataFrame | None = None
+    notes: pl.DataFrame | None = None
 
 
 def empty(schema: pl.Schema) -> pl.DataFrame:
@@ -332,6 +349,11 @@ def sighted(tabulated: Tabulated, jurisdiction: str) -> Ledgers:
         sessions=tabulated.sessions,
         codes=_stamped(tabulated.codes, pub["publication"], CODES_SCHEMA),
         attachments=_stamped(tabulated.attachments, pub["publication"], ATTACHMENTS_SCHEMA),
+        notes=(
+            ledger.sightings(tabulated.notes, NOTE_KEY, **stamp)
+            if tabulated.notes is not None
+            else None
+        ),
     )
 
 
@@ -369,6 +391,7 @@ def merged(a: Ledgers, b: Ledgers) -> Ledgers:
         sessions=pl.concat(sessions, how="vertical_relaxed") if sessions else None,
         codes=_by_publication(a.codes, b.codes),
         attachments=_by_publication(a.attachments, b.attachments),
+        notes=fold(a.notes, b.notes, NOTE_KEY),
     )
 
 
@@ -408,6 +431,7 @@ def stored_ledgers(stored: Mapping[str, pl.DataFrame]) -> Ledgers:
         sessions=stored.get(registry.SESSIONS),
         codes=stored.get(registry.LAW_CODES),
         attachments=stored.get(registry.LAW_ATTACHMENTS),
+        notes=part(registry.LAW_NOTES, NOTE_KEY),
     )
 
 
@@ -592,6 +616,28 @@ def law_history(found: Ledgers, jurisdiction: str, conventions: Conventions = NO
         .select(HISTORY_SCHEMA.names())
         .cast(HISTORY_SCHEMA)
         .sort("law_version_id", "first_seen", "id")
+    )
+
+
+def law_notes(found: Ledgers, jurisdiction: str) -> pl.DataFrame:
+    """One row per note printed with a section or a heading."""
+    if found.notes is None:
+        return empty(NOTE_SCHEMA)
+    j, code = jurisdiction, pl.col("law_code")
+    target = (
+        pl.when(pl.col("section_num").is_not_null())
+        .then(ids.law_section(j, code, pl.col("section_num")))
+        .otherwise(ids.law_node(j, code, pl.col("node_treepath")))
+    )
+    note_sha = pl.concat_str(pl.col("kind"), pl.lit("\0"), pl.col("text")).map_elements(
+        lambda t: hashlib.sha256(t.encode()).hexdigest(), return_dtype=pl.String
+    )
+    return (
+        found.notes.with_columns(target.alias("target_id"), pl.lit(j).alias("jurisdiction"))
+        .with_columns(ids.law_note(pl.col("target_id"), note_sha).alias("id"))
+        .select(NOTE_SCHEMA.names())
+        .cast(NOTE_SCHEMA)
+        .sort("target_id", "kind", "first_seen", "id")
     )
 
 
@@ -842,4 +888,5 @@ def datasets(
         registry.LAW_ANCESTORS: law_ancestors(found, jurisdiction, census),
         registry.LAW_SUBDIVISIONS: subdivisions,
         registry.SEGMENTS: all_segments,
+        registry.LAW_NOTES: law_notes(found, jurisdiction),
     }

@@ -7,6 +7,7 @@ from pathlib import Path
 SRC = Path(__file__).resolve().parent.parent / "src" / "nomoscope"
 LAYERS = [
     {
+        "chat",
         "coverage",
         "errors",
         "parquet",
@@ -22,7 +23,7 @@ LAYERS = [
     {"pdf"},
     {"crunch"},
     {"derive"},
-    {"embed"},
+    {"embed", "extract"},
     {"catalog"},
     {"search"},
     {"answer"},

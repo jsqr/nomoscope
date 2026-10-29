@@ -106,12 +106,15 @@ project builds is in the registry it passes to `cli.app`:
 - its routes, which send each record to a cruncher;
 - its segment settings, which derive cuts text with;
 - its directory of drafting conventions, `<drafting>.toml` files;
+- the chat models it calls, by slug (`chat_models`);
+- its directory of citation name tables, `<jurisdiction>.toml` files
+  (`citations`);
 - a reader of publishers' listings, for `coverage match`;
 - its own tables to show in the catalog (`views`);
 - its committed settings file and the tables it reads (`settings`, `tables`).
 
-Conventions, and any config files a cruncher declares, are inputs of the
-steps that read them, so a change reruns those steps.
+Conventions, citation name tables, and any config files a cruncher
+declares, are inputs of the steps that read them, so a change reruns those steps.
 
 ## Stages
 
@@ -121,6 +124,7 @@ steps that read them, so a change reruns those steps.
 | crunch | `crunch` | `sources/snarfed/`, routes, a cruncher's config | `sources/crunched/<cruncher>/` |
 | derive | `derive` | tabulated tables, conventions, jurisdictions | `derived/`, the catalog |
 | embed | `embed --spend <dollars>` | `derived/segments`, the block tables | `embeddings/` |
+| extract | `extract <task> --spend <dollars>`, `derive` | the law datasets, name tables | `extractions/`, `derived/<task>/` |
 | query | `sql "<query>"`, `cite`, `search` | `catalog.duckdb`, `embeddings/` | `search.duckdb` |
 | answer | `ask --spend <dollars>` | search, a question or a group file | `answers/` |
 
@@ -219,6 +223,7 @@ until a person has checked it. `status` counts held tabulations.
 | `law_nodes` | heading in the publication |
 | `law_publications` | publication (one row) |
 | `sessions` | legislative session (optional) |
+| `law_notes` | note printed with a section or a heading (optional) |
 
 Every row has a `jurisdiction`. `law_code` is the code's short name in
 the jurisdiction, such as `municipal` or `GOV`. `drafting` names the
@@ -230,6 +235,13 @@ endings, Unicode composition, quote marks, and spacing are made uniform,
 and soft hyphens are removed. Other characters, such as the section sign,
 are kept. The number of lines does not change. So the same words with different
 spacing are one version. The source's own form belongs in `markup`.
+
+`law_notes` holds running headers and footers (`kind` `running`) and
+publisher's notes (`publisher`) printed with a section or heading. A section
+note sets `section_num`; a heading note sets only `node_treepath`. Notes are
+kept out of the law text because they can name enacting laws and because a
+footer such as a supplement number changes between publications of the same
+text.
 
 A cruncher that knows a section's subdivisions gives them in
 `subdivisions`: each one's path below the section (`A/1`), the source's
@@ -310,6 +322,7 @@ Other ids join the jurisdiction, a kind, and the source's keys with `/`:
 | `law_ancestors` | pair of a section or heading and one of its ancestors |
 | `law_subdivisions` | subdivision of a version |
 | `segments` | segment of a version |
+| `law_notes` | note printed with a section or a heading |
 
 `publications` and `sessions` are built for every jurisdiction. The law
 datasets are built only if the jurisdiction's publications carry law
@@ -326,8 +339,8 @@ Each observed dataset has these columns:
 - `first_publication` and `last_publication`: their ids.
 - `absent_from`: the date of the first full publication of the row's code
   after the row was last seen. Null while the row is in the latest full
-  publication. Partial publications do not set it. `law_history` does not
-  have this column.
+  publication. Partial publications do not set it. `law_history` and
+  `law_notes` do not have this column.
 
 Publications can be combined in any order. Adding a publication to the
 stored datasets gives the same result as rebuilding from all
@@ -432,6 +445,132 @@ keyed by content, so a derive that changes segments changes only what is
 pending, and a model or width names its own partition. Embedding is not
 a graph step.
 
+## Extraction
+
+`extract <task>` sends passages to a chat model, stores the replies, and
+builds the task's dataset once a jurisdiction's passages are all extracted.
+`derive` also builds these datasets.
+
+| task | one row per |
+| --- | --- |
+| `definitions` | defined term, with its scope |
+| `interpretation` | rule of interpretation (number and gender, computation of time, severability, ...), with its scope |
+| `penalties` | penalty or other consequence of a violation, with its scope |
+| `references` | citation, with its resolved target |
+| `enactments` | enacting instrument named, with its action and dates |
+
+A task runs only if its settings table names one of the project's chat
+models.
+
+| `[<task>]` key | default |
+| --- | --- |
+| `model` | none |
+| `limit`, `unit` | 600 words |
+| `concurrency` | 8 |
+| `unextracted` | 0 |
+
+### Units
+
+A unit is one request. A version that fits the limit is one unit; a longer
+one is cut at its subdivisions as segments are. Only units containing one of
+the task's indicator words are sent. Context is the heading path and the
+enclosing lead-ins. For `references` it is only the section and the piece's
+position, because a lead-in's citations belong to the lead-in's own unit. A
+lead-in containing an indicator word is its own unit.
+
+`enactments` also sends history notes, headings, and `law_notes` rows, each
+whole, with a one-line label as context. Every request starts with a line
+naming the jurisdiction.
+
+Units are hashed like segments, so repeated text is sent once. A footer
+printed on every page is one request, and its items are attached to every
+section it appears with.
+
+### Store and run
+
+```
+extractions/task=<task>/model=<slug>/jurisdiction=<j>/<time>-<writer>.parquet
+  content_sha256, prompt_version, ordinal, item, start_char, end_char, extra,
+  input_tokens, output_tokens, answered_by, failed, attempt
+```
+
+Without `--spend`, `extract` prints pending units and estimated cost and
+sends nothing. With it, units are sent in order until the estimates reach
+the spend, and the store is written every 100 units.
+
+The model copies each item verbatim. The item's span is found by exact
+search after straightening quote marks and collapsing whitespace, or else as
+the closest window with similarity at least 0.8. Items not found are dropped.
+
+A reply that does not fit the schema is sent back once with the error. If it
+fails again, or the provider rejects the request, the unit is stored with
+the reason in `failed` and stops being pending. Timeouts and throttling
+leave it pending. Files in the store are only added, as in the archive.
+
+### Datasets
+
+```
+derived/<task>/jurisdiction=<j>/data.parquet
+```
+
+A dataset is built only when no more than `unextracted` units are missing;
+otherwise the step reports the count. Its inputs are the jurisdiction's
+derive step, the store's files, and the name tables. The model, prompt
+version, and unit limit are part of its code version.
+
+| column | |
+| --- | --- |
+| `id` | `<block_id>/<kind>/<n>` |
+| `source` | `text`, `history`, `heading`, `running`, or `publisher` |
+| `block_id` | the version, history wording, heading, or note |
+| `section_id`, `node_id` | the section or heading the block belongs to |
+| `start_char`, `end_char` | span in the block's text |
+| `text` | the item as written |
+| `confidence` | the model's, 0 to 1 |
+| `content_sha256` | the unit's hash |
+| `model`, `prompt_version` | |
+
+### Scopes
+
+Definitions, rules, and penalties resolve their scope phrase to an id.
+"this section" is the section and "this code" the code. "this <level>" is
+the nearest heading of that level above the passage, or the enclosing
+subdivision of that level. Level words come from the rows. An unknown
+phrase keeps `scope_id` null.
+
+| `scope_basis` | when |
+| --- | --- |
+| `stated` | the passage names the scope |
+| `governing` | a passage under the same heading says its definitions apply to a larger division |
+| `default` | a penalty applies where no other is provided; with no stated scope it covers the code |
+
+The catalog views `definitions_in_force` and `penalties_in_force` add
+`start_date`, `end_date`, and their bases from `law_in_force` to rows from a
+version's text.
+
+### Citations
+
+A reference keeps the parts the model read (`kind`, `code`, `section`,
+`path`, `section_end`, `path_end`, `enactment`, `enactment_number`,
+`enactment_year`, `relative`) and a `bluebook` form. `target_id` is a
+nomoscope id whether or not the target is loaded, such as
+`us-ny/law/TWN/130` for Town Law section 130. A citation naming no code, or
+a relative one such as "subsection (a)", uses the passage's own code and
+section.
+
+| `target_status` | |
+| --- | --- |
+| `resolved` | the target is in this jurisdiction's rows |
+| `unloaded` | the target's code is not loaded here |
+| `unresolved` | the citation could not be placed |
+
+Name tables map code names to id prefixes and words for enacting
+instruments to kinds. Each is `<jurisdiction>.toml` in the registry's
+`citations` directory and also applies to jurisdictions below it;
+`src/nomoscope/extract/names.py` gives the format. Enactment ids are
+`<jurisdiction>/enactment/<kind>/<year>/<number>`, with `-` for a missing
+year, in both `references` and `enactments`.
+
 ## Search
 
 `search QUERY -j <jurisdiction> [--on DATE] [--text] [--rerank]` ranks
@@ -518,7 +657,7 @@ reads them all.
 
 | `[answers]` key | default |
 | --- | --- |
-| `model` | `glm-5-3-low` (GLM-5.3 on Fireworks, low reasoning effort) |
+| `model` | none: a slug from the project's chat models (`Registry.chat_models`) |
 | `passages` | 12 |
 | `text` | true |
 | `rerank` | true |

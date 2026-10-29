@@ -1,10 +1,12 @@
 import json
+import os
 from datetime import date
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
-from nomoscope import cli
+from nomoscope import cli, settings
 from nomoscope.embed import models, store, text
 from nomoscope.search import fulltext, query
 from tests import census, fake
@@ -207,8 +209,10 @@ text = "If so, how?"
 
 
 def test_ask_answers_a_group_in_order_and_stores_it(three, vectors, tmp_path, monkeypatch):
-    from nomoscope.answer import client as chat
+    from nomoscope import chat
 
+    path = Path(os.environ[settings.env_config(fake.APP)])
+    path.write_text(path.read_text() + f'[answers]\nmodel = "{fake.CHAT.slug}"\n')
     sent = []
 
     def complete(http, model, messages, schema):

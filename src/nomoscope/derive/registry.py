@@ -17,6 +17,7 @@ LAW_NODES = "law_nodes"
 LAW_ANCESTORS = "law_ancestors"
 LAW_SUBDIVISIONS = "law_subdivisions"
 SEGMENTS = "segments"
+LAW_NOTES = "law_notes"
 # The codes each publication holds, and its material that is not law.
 LAW_CODES = "law_codes"
 LAW_ATTACHMENTS = "law_attachments"
@@ -30,6 +31,7 @@ LAW_DATASETS = (
     LAW_ANCESTORS,
     LAW_SUBDIVISIONS,
     SEGMENTS,
+    LAW_NOTES,
 )
 DATASETS = (*COMMON_DATASETS, *LAW_DATASETS)
 JURISDICTIONS = "jurisdictions"

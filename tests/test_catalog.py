@@ -15,6 +15,7 @@ J = "us-il-windytown"
 # Section 1-1 replaced by a stub that states its repeal.
 P4 = P3.replace("publication 2025-01-10", "publication 2025-06-01").replace(
     "section 1-1 | Title | Ord. 2019-12, passed 12-3-2019, eff. 1-1-2020\n"
+    "note running | Windytown Code, Supp. No. 3\n"
     "This code is the Windytown Code.",
     "section 1-1 | Title | Repealed by Ord. 2025-9, eff. 7-1-2025\nRepealed.",
 )
@@ -138,6 +139,7 @@ def test_the_catalog_lists_every_view(three):
             "law_codes",
             "law_history",
             "law_in_force",
+            "law_notes",
             "law_nodes",
             "law_observations",
             "law_subdivisions",

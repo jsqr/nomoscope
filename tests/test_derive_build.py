@@ -100,6 +100,38 @@ def test_the_other_datasets(cfg, tmp_path):
     assert jurisdictions.filter(pl.col("id") == "us-il")["state_fips"].to_list() == ["17"]
 
 
+def test_notes_are_kept_with_their_section_or_heading(cfg, tmp_path):
+    three(cfg, tmp_path)
+    derive(cfg)
+    notes = read(cfg, registry.LAW_NOTES).sort("text")
+    assert notes.select("target_id", "kind", "text", "first_seen", "last_seen").rows() == [
+        (
+            f"{J}/node/municipal/1",
+            "publisher",
+            "Editor's note: Ord. 2019-12 adopted this chapter.",
+            date(2024, 1, 15),
+            date(2025, 1, 10),
+        ),
+        (
+            f"{J}/law/municipal/1-1",
+            "running",
+            "Windytown Code, Supp. No. 1",
+            date(2024, 1, 15),
+            date(2024, 1, 15),
+        ),
+        (
+            f"{J}/law/municipal/1-1",
+            "running",
+            "Windytown Code, Supp. No. 3",
+            date(2025, 1, 10),
+            date(2025, 1, 10),
+        ),
+    ]
+    assert notes["id"][1].startswith(f"{J}/law/municipal/1-1/note/")
+    texts = read(cfg, registry.LAW_VERSIONS)["text"].to_list()
+    assert not any("Supp. No." in t for t in texts)
+
+
 def test_a_rerun_is_a_no_op_and_a_new_publication_folds_onto_the_stored(cfg, tmp_path):
     publish(cfg, tmp_path, P1, "p1.txt")
     publish(cfg, tmp_path, P2, "p2.txt", completeness="partial")

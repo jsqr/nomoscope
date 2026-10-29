@@ -86,6 +86,8 @@ myproject embed                          # estimate the cost of embedding new se
 myproject embed --spend 2                # embed them (billed; FIREWORKS_API_KEY)
 myproject search "dogs off leash" -j us-il-springfield --text
 myproject ask --group questions.toml -j us-il-springfield --spend 1   # billed
+myproject extract definitions -j us-il-springfield            # estimate
+myproject extract definitions -j us-il-springfield --spend 1  # billed; builds what is complete
 ```
 
 ## Contributing

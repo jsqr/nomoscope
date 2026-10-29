@@ -2,6 +2,8 @@
 
 There is one view per dataset, one per table the project names (`Registry.views`),
 one of the coverage rows in force, plus the views and macros in schema.sql.
+`definitions_in_force` and `penalties_in_force` add each version's interval
+in force to the extracted rows from its text.
 `segment_texts` gives each segment's embedded text, rebuilt as
 `embed.text` does; `segment_embeddings` gives the stored vectors of the
 `[embeddings]` model, one per jurisdiction and hash.
@@ -38,6 +40,15 @@ SELECT s.*, substr(v.text, s.start_char + 1, s.end_char - s.start_char) AS body,
 FROM segments s
 JOIN law_versions v ON v.jurisdiction = s.jurisdiction AND v.id = s.block_id
 WHERE s.block_kind = 'law_section'
+"""
+
+IN_FORCE = ("definitions", "penalties")
+IN_FORCE_SQL = """
+CREATE VIEW {name}_in_force AS
+SELECT x.*, f.start_date, f.end_date, f.start_basis, f.end_basis
+FROM {name} x
+JOIN law_in_force f ON f.jurisdiction = x.jurisdiction AND f.id = x.block_id
+WHERE x.source = 'text'
 """
 
 # schema.sql is applied only when these views exist.
@@ -124,6 +135,10 @@ def build(cfg: Settings, project: Mapping[str, str] | None = None) -> CatalogRes
         if set(NEEDS) <= set(views):
             conn.execute(schema())
             views.append("law_in_force")
+            for name in IN_FORCE:
+                if name in views:
+                    conn.execute(IN_FORCE_SQL.format(name=name))
+                    views.append(f"{name}_in_force")
         if {registry.SEGMENTS, registry.LAW_VERSIONS} <= set(views):
             conn.execute(SEGMENT_TEXTS_SQL)
             views.append(SEGMENT_TEXTS)

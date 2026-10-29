@@ -6,6 +6,8 @@ from nomoscope.crunch import runner
 from nomoscope.crunch.registry import Registry
 from nomoscope.derive import build, reference
 from nomoscope.derive import conventions as drafting
+from nomoscope.extract import build as extracted
+from nomoscope.extract import names
 from nomoscope.graph import steps
 from nomoscope.graph.steps import Planned
 from nomoscope.graph.store import Store
@@ -35,6 +37,8 @@ def listing(cfg: Settings, known: Registry) -> list[StepLine]:
         if census:
             planned.append(reference.plan(census))
         planned.extend(p.planned for p in build.plan(conn, routes, found, known.segments))
+        tasks = extracted.configured(cfg, known.chat_models)
+        planned.extend(extracted.plan(cfg, conn, tasks, names.load(known.citations)))
         state = steps.classify(cfg, conn, planned)
     return [
         StepLine(p.key.stage, p.key.scope, p.key.unit, state[p.key].value, len(p.inputs))

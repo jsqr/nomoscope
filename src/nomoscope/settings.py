@@ -31,7 +31,23 @@ from nomoscope.errors import NomoscopeError
 USER_CONFIG_DIR = Path("~/.config")
 DEFAULT_USER_AGENT = "nomoscope/0.1.0 (+https://github.com/jsqr/nomoscope)"
 # Top-level keys nomoscope reads. Projects add their tables.
-KEYS = frozenset({"data_root", "user_agent", "sources", "ocr", "embeddings", "search", "answers"})
+# The last five are the extraction tasks (`extract/tasks.py`).
+KEYS = frozenset(
+    {
+        "data_root",
+        "user_agent",
+        "sources",
+        "ocr",
+        "embeddings",
+        "search",
+        "answers",
+        "definitions",
+        "interpretation",
+        "penalties",
+        "references",
+        "enactments",
+    }
+)
 
 
 # Settings that left the settings file, and where they went.

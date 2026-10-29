@@ -18,11 +18,11 @@ from datetime import date
 from typing import Any
 
 from nomoscope.answer import prompt, schema
-from nomoscope.answer.client import Completion
 from nomoscope.answer.group import Group, Question
-from nomoscope.answer.models import DEFAULT_CHAT, AnswerError, ChatModel
+from nomoscope.answer.models import AnswerError
 from nomoscope.answer.prompt import Passage, Prior
 from nomoscope.answer.schema import Response
+from nomoscope.chat import ChatModel, Completion
 from nomoscope.search.query import Hit
 
 PASSAGES = 12
@@ -38,7 +38,7 @@ Complete = Callable[[list[dict[str, str]]], Completion]
 
 @dataclass(frozen=True)
 class Options:
-    model: str = DEFAULT_CHAT
+    model: str = ""
     passages: int = PASSAGES
     text: bool = True
     rerank: bool = True

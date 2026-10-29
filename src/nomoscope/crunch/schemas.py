@@ -34,7 +34,16 @@ SESSIONS = "sessions"
 # The codes a publication holds, and the material in it that is not law.
 LAW_CODES = "law_codes"
 LAW_ATTACHMENTS = "law_attachments"
-TABLES = (LAW_SECTIONS, LAW_NODES, LAW_PUBLICATIONS, SESSIONS, LAW_CODES, LAW_ATTACHMENTS)
+LAW_NOTES = "law_notes"
+TABLES = (
+    LAW_SECTIONS,
+    LAW_NODES,
+    LAW_PUBLICATIONS,
+    SESSIONS,
+    LAW_CODES,
+    LAW_ATTACHMENTS,
+    LAW_NOTES,
+)
 
 BASES = ("stated", "last_modified", "fetched")
 # A section's subdivisions, where the cruncher knows them: spans into its
@@ -159,6 +168,19 @@ def tabulated(zone: str) -> dict[str, pl.Schema]:
                 "text": pl.String,
             }
         ),
+        # Running headers and footers (kind running) and publisher's notes
+        # (kind publisher) printed with a section or heading. Section notes
+        # set section_num; heading notes set node_treepath.
+        LAW_NOTES: pl.Schema(
+            {
+                "jurisdiction": pl.String,
+                "law_code": pl.String,
+                "section_num": pl.String,
+                "node_treepath": pl.String,
+                "kind": pl.String,
+                "text": pl.String,
+            }
+        ),
     }
 
 
@@ -175,6 +197,7 @@ REQUIRED = {
     SESSIONS: ("jurisdiction", "session"),
     LAW_CODES: ("jurisdiction", "law_code", "kind"),
     LAW_ATTACHMENTS: ("jurisdiction", "code", "kind", "text"),
+    LAW_NOTES: ("jurisdiction", "law_code", "kind", "text"),
 }
 
 
