@@ -43,7 +43,7 @@ def parse(content: str, labels: Collection[str]) -> Response:
         raise AnswerError(f"the reply does not fit the response schema: {e}") from e
     if not 0 <= found.confidence <= 1:
         raise AnswerError(f"confidence {found.confidence} is not between 0 and 1")
-    # The rationale cites "[P2]", and models carry the brackets over.
+    # The rationale cites "[P2]", and models write the citations with the brackets.
     found = found.model_copy(update={"citations": [c.strip(" []") for c in found.citations]})
     unknown = [c for c in found.citations if c not in labels]
     if unknown:

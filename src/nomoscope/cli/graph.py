@@ -29,7 +29,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
 
     @app.command("status")
     def status_show() -> None:
-        """Show what each source, cruncher, and jurisdiction has been through."""
+        """Show the state of each source, cruncher, and jurisdiction."""
         report = status.status(load_settings(name, registry), registry)
         typer.echo(f"data_root: {report.data_root}")
         typer.echo(f"catalog:   {'built' if report.catalog else 'not built'}")

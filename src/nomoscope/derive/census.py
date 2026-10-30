@@ -13,8 +13,8 @@ and a village of the same name do, each takes its kind as a suffix,
 `us-ny-hunter_town` and `us-ny-hunter_village`. A county subdivision
 whose id is still shared, as Iowa's many Webster townships are, sits under
 its county: `us-ia-hamilton_county-webster_township`. A place whose id is
-still shared, as when "Webster City" meets "Webster" with the suffix
-`_city`, takes its GEOID: `us-ia-webster_city_1983145`.
+still shared, as "Webster" with the suffix `_city` collides with "Webster
+City", takes its GEOID: `us-ia-webster_city_1983145`.
 """
 
 import re

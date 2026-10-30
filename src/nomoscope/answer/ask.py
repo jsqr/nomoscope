@@ -7,7 +7,7 @@ reason; a second failure is recorded as the question's error, and its
 dependents are still asked without it.
 
 The spend limit works on estimates made before each question: a run stops
-before a question whose estimate would pass what is left. Costs recorded
+before a question whose estimate would exceed what is left. Costs recorded
 are the provider's token counts at the model's prices. Retrieval's own
 calls (the query vector, reranking) are not counted; they cost far less.
 """
@@ -194,7 +194,7 @@ def ask_group(
     augment: Augment | None = None,
     lookups: float = 0.0,
 ) -> GroupRun:
-    """Every question in order, while the spend lasts."""
+    """Every question in order, until the spend runs out."""
     done: dict[str, Answered] = {}
     left = spend
     order = g.order()

@@ -119,7 +119,7 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
 
         A listed jurisdiction that already has a publisher is left alone. A
         jurisdiction with one listing of its state, name, and kind gets it; the
-        rest are printed to settle with `coverage set`.
+        rest are printed to be resolved with `coverage set`.
         """
         cfg = load_settings(name, registry)
         if registry.listings is None:

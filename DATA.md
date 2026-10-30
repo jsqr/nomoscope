@@ -89,7 +89,7 @@ with a kind such as "City of" or "County" and a trailing ", ST" removed,
 is the jurisdiction's Census name, and its kind, if the name or the
 listing gives one, shares a word with the Census kind. A jurisdiction with exactly one fitting
 listing, which fits no other, gets that listing's publisher and URL. The
-others are printed to settle with `coverage set`. `--dry-run` writes
+others are printed to be resolved with `coverage set`. `--dry-run` writes
 nothing.
 
 ## The project's registry
@@ -617,7 +617,7 @@ A reply that does not fit, or cites a passage not supplied, is sent back
 once with the reason; a second failure is stored as the question's
 `error`. It is billed per token: without `--spend`, `ask` prints the order
 and an estimate and calls nothing. A run stops before a question whose
-estimate would pass what is left of the spend.
+estimate would exceed what is left of the spend.
 
 A group file is TOML. Questions form a DAG through `after`:
 

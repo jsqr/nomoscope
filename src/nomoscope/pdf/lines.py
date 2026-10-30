@@ -10,8 +10,8 @@ block, one line per row in markdown.
 On a page whose text the blocks cover, the blocks also give the reading
 order: each fragment goes to its block before rows are formed, so a row
 never joins two blocks, and lines are read block by block in the OCR's
-order. This is how a two-column page is read column by column. There, the
-right column's x is moved onto the left column's, so a line's x is its
+order. This is how a two-column page is read column by column. On such a
+page, the right column's x is moved onto the left column's, so a line's x is its
 place within its column, and `centered` is measured within the column. Other pages
 are read top to bottom.
 

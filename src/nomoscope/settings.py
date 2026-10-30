@@ -51,7 +51,7 @@ KEYS = frozenset(
 )
 
 
-# Settings that left the settings file, and where they went.
+# Settings that no longer exist, and what replaced them.
 MOVED = {
     "config_root": "grammars and conventions are directories in the project's registry, "
     "and its routes are values there",
