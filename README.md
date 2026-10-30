@@ -10,10 +10,10 @@ files, queried through DuckDB or polars.
 A project that uses nomoscope should supply:
 
 - **Sources and crunchers:** code that fetches a publisher's files and
-  turns them into the tabulated tables, passed to nomoscope in a `Registry`.
-- **In the same registry:** which cruncher reads each code, the segment
-  settings, the directory of drafting conventions, and any tables of the
-  project's own to show in the catalog.
+  turns them into uniform tables, passed to nomoscope in a `Registry`.
+- **In the same registry:** designating the cruncher that reads each code,
+  segment settings, the directory of drafting conventions, and any project
+  tables to show in the catalog.
 - **A data root:** a directory outside the repository for the archive and
   the tables.
 
@@ -21,7 +21,7 @@ A project that uses nomoscope should supply:
 
 ## Setup
 
-Developed on macOS and Linux. Requires Python 3.14,
+Developed on Linux and macOS. Requires Python 3.14,
 [uv](https://docs.astral.sh/uv/), and [just](https://just.systems/).
 
 ```bash
@@ -33,7 +33,7 @@ just test        # pytest
 
 ## Using nomoscope from a project
 
-A project constructs its command-line interface from its registry:
+A project constructs a command-line interface from its registry:
 
 ```python
 # myproject/cli.py
@@ -64,14 +64,13 @@ key_env = "PUBLISHER_API_KEY"    # read with Settings.secret("publisher")
 model = "mistral-ocr-latest"     # the default; pages = 8 is the other key
 ```
 
-That file describes the machine. A project may also commit a settings
-file of its own (`Registry.settings`) for choices that change what it
-builds, such as a stage's model; the machine's file is read over it, key
+That file describes the local machine. A project may also commit a
+settings file (`Registry.settings`) for parameters that affect outputs
+such as the model used in a stage; the machine's file is read over it, key
 by key. `Registry.tables` names the project's own tables, which it reads
 with `Settings.table(name)`. Any other top-level key is an error.
-`settings` prints each value with the file it came from. The project's
-routes, segment settings, and conventions are in its registry; DATA.md
-describes them.
+`settings` prints each value with the file it came from. The project keeps
+its routes, segment settings, and conventions in a registry (see DATA.md).
 
 Commands:
 

@@ -1,48 +1,50 @@
 # The data
 
-This file describes where nomoscope stores data, what each stage writes,
-and how dates are kept. The column schemas are in
+This file describes where nomoscope stores data, data written by
+each stage, and date tracking. The column schemas are in
 `src/nomoscope/crunch/schemas.py` and `src/nomoscope/derive/datasets.py`.
 
 ## Data root
 
-All data is under the project's data root, `data_root` in its settings
-file:
+All data is under the project's data root (`data_root` in the settings
+file):
 
 ```
 $data_root/
-  sources/snarfed/     the archive of fetched and imported files
+  sources/snarfed/     archive of fetched and imported files
   sources/crunched/    tables built from the archive, by cruncher
   derived/             tables in the shared layout
   staging/             downloads in progress
-  coverage/            the jurisdictions the project covers, from `coverage`
+  coverage/            jurisdictions the project covers, from `coverage`
   embeddings/          vectors of segments, by content hash, from `embed`
   answers/             answers to questions, with the passages they rest on, from `ask`
-  graph.duckdb         the graph store
+  graph.duckdb         graph store
   catalog.duckdb       views over derived/, coverage/, embeddings/, and the project's tables
-  search.duckdb        the full-text index of segments, rebuilt by `search --text`
+  search.duckdb        full-text index of segments, rebuilt by `search --text`
 ```
 
 A project may keep its own directories under the data root, such as
-records of people's decisions; `Registry.views` shows their tables in the
+records of operator decisions; `Registry.views` shows their tables in the
 catalog.
 
 Each tier can be rebuilt from the one before it. The archive cannot be
 rebuilt, because a source may stop serving a file. `coverage/` cannot be
-rebuilt either, because it records people's decisions. `embeddings/`
-and `answers/` can be rebuilt only by paying for them again. `staging/` and
-`search.duckdb` are safe to delete.
+rebuilt either, because it records operator decisions. `embeddings/`
+and `answers/` can be rebuilt only by paying for API fees again.
+`staging/` and `search.duckdb` are safe to delete.
 
-The graph store records each step's inputs, code version, and output
-tables. A step reruns when one of these changes or an output file is
-missing. `status` summarizes the store. `graph show` lists every step.
+The graph store records inputs, code version, and output tables for each
+step. When one of these elements changes or an output file is missing, the
+step is rerun.
+
+`status` summarizes what's in the store. `graph show` lists every step.
 
 ### Sharing a data root
 
 Several data roots can share one copy of the archive, the crunched
-files, and the people's decisions, because none of these files is ever
+files, and operator decisions, because none of these files is ever
 rewritten: a file name always holds the same content. The graph store,
-the catalog, `derived/`, and `staging/` stay with each data root.
+catalog, `derived/`, and `staging/` stay with each data root.
 
 - The archive stores files by hash and each record under a new name. A
   record counts once its `fetch.json` exists.
@@ -60,8 +62,8 @@ next crunch registers the records again and adopts each finished step.
 
 ### Coverage
 
-`coverage/` lists the jurisdictions the project collects codes for. Each
-row gives a jurisdiction, whether it is listed or removed, its code's
+`coverage/` lists the jurisdictions for which the project collects codes.
+Each row gives a jurisdiction, whether it is listed or removed, its code's
 publisher and URL, who wrote the row and when, and a note. A publisher is
 a source id when the project has a source for it, and otherwise a name.
 Files are only added. The latest row of a jurisdiction is the one in
@@ -84,19 +86,20 @@ as `Registry.listings`: a function from settings to
 `nomoscope.coverage.Listing` values, each with a state, the name as the
 library writes it, a publisher, a URL, and the archive record it came
 from. `coverage match` pairs them with listed jurisdictions that have no
-publisher yet. A listing fits a jurisdiction of its state when its name,
-with a kind such as "City of" or "County" and a trailing ", ST" removed,
-is the jurisdiction's Census name, and its kind, if the name or the
-listing gives one, shares a word with the Census kind. A jurisdiction with exactly one fitting
-listing, which fits no other, gets that listing's publisher and URL. The
-others are printed to be resolved with `coverage set`. `--dry-run` writes
-nothing.
+publisher yet. A listing fits a jurisdiction in a given state when its name
+(with a kind such as "City of" or "County", and a trailing ", ST" removed)
+matches the jurisdiction's Census name; _and_ its kind, if the name or the
+listing gives one, shares a word with the Census kind. A jurisdiction with
+exactly one corresponding listing gets that listing's publisher and URL.
+The others are printed to be resolved with `coverage set`. `--dry-run`
+writes nothing.
 
 ## The project's registry
 
-The machine's settings file gives where the data root is, the user agent,
-and which environment variables hold keys. The project's committed
-settings file (`Registry.settings`, read under the machine's) gives
+The machine's local settings file indicates the location of the data
+root, the user agent, and environment variables for API keys.
+The project's committed
+settings file (`Registry.settings`, read under the machine's) indicates
 choices such as a stage's model and the OCR model. A setting that changes
 a step's output must enter that step's code version or inputs, so that
 changing it reruns the step. Everything else that decides what the
@@ -113,8 +116,8 @@ project builds is in the registry it passes to `cli.app`:
 - its own tables to show in the catalog (`views`);
 - its committed settings file and the tables it reads (`settings`, `tables`).
 
-Conventions, citation name tables, and any config files a cruncher
-declares, are inputs of the steps that read them, so a change reruns those steps.
+Conventions, citation name tables, and any config files declared by
+a cruncher are step inputs, so a change reruns those steps.
 
 ## Stages
 
@@ -147,8 +150,8 @@ A record can also hold a tree of files. Its manifest lists every file,
 and its hash is the manifest's hash.
 
 A record can have attached records (`snarf/attach.py`): files made from it,
-such as OCR responses for a PDF, archived because they cannot be made
-again for free. An attached record's params name its record (`of`) and
+such as OCR responses for a PDF, archived because they cannot be
+reconstructed for free. An attached record's params give its name (`of`) and
 repeat that record's params; its feed is not crunchable, so it is never
 routed to a cruncher. A cruncher can read it with its record and declare it
 an input, so attaching one reruns that record's steps.
@@ -190,8 +193,9 @@ The registry's routes then assign each record a cruncher:
 
 ## Crunched
 
-A cruncher turns records into the tabulated tables. It may write its own
-snapshot tables first. Paths:
+A cruncher turns records into tabulated tables, with a uniform schema
+across sources and jurisdictions. It may write its own snapshot tables first.
+Paths:
 
 ```
 sources/crunched/<cruncher>/<table>/publication=<unit>/<fingerprint>.parquet           snapshots
@@ -204,16 +208,16 @@ a step rerun under other inputs or code writes beside its old files.
 Readers take a step's paths from the graph store, not from a directory
 listing.
 
-After its tables, a step writes its manifest: what the graph store holds
-for it (inputs, code version, details, and each table's path, rows, and
+After its tables, a step writes its manifest: a profile of the graph store
+(inputs, code version, details, and each table's path, rows, and
 column fingerprint). When crunch finds a step to run whose manifest and
 tables are already present, it records the step from the manifest and
 does not run it; the crunch output marks it "adopted". `--force` and
 `--record` always run.
 
-A tabulation can be held: a cruncher that records `admitted: false` in
-the tabulate step's details keeps derive from reading it, for instance
-until a person has checked it. `status` counts held tabulations.
+A tabulation can be held pending operator verification: when a cruncher
+records `admitted: false` for the tabulate step, that blocks derive from
+reading it. `status` counts the held-up tabulations.
 
 ### The tabulated tables
 
@@ -232,8 +236,8 @@ source has a default effective-date rule.
 
 Section text is normalized before it is hashed into `text_sha256`. Line
 endings, Unicode composition, quote marks, and spacing are made uniform,
-and soft hyphens are removed. Other characters, such as the section sign,
-are kept. The number of lines does not change. So the same words with different
+and soft hyphens are removed. Other characters are kept, such as the section
+sign. The number of lines does not change. So the same words with different
 spacing are one version. The source's own form belongs in `markup`.
 
 `law_notes` holds running headers and footers (`kind` `running`) and
@@ -243,10 +247,10 @@ kept out of the law text because they can name enacting laws and because a
 footer such as a supplement number changes between publications of the same
 text.
 
-A cruncher that knows a section's subdivisions gives them in
-`subdivisions`: each one's path below the section (`A/1`), the source's
-word for its level, its style and number, and its span into the
-normalized text.
+A cruncher indicates a section's subdivisions in `subdivisions`:
+path below the section (`A/1`), the source's
+level designation word (e.g., "paragraph"), style and number, and
+span into the normalized text.
 
 `law_publications` describes the publication:
 
@@ -719,7 +723,7 @@ whose code is not loaded (`target_status` `unloaded`) gets the text a web
 lookup finds (`src/nomoscope/lookup/`):
 
 1. The cache is read first, and a cached miss counts too.
-2. Tavily is searched for the citation's Bluebook form, or for the citation
+2. Tavily does a search for the citation's Bluebook form, or for the citation
    as written after the cited jurisdiction's name. The first search is
    limited to `[lookups] domains`; if no page yields the provision, a second
    search is open to any domain. A result page whose text is short (some
