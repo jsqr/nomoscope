@@ -44,7 +44,8 @@ class Provider:
 
 FIREWORKS = Provider("fireworks", "https://api.fireworks.ai/inference/v1", "FIREWORKS_API_KEY")
 OPENROUTER = Provider("openrouter", "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY")
-PROVIDERS = {p.name: p for p in (FIREWORKS, OPENROUTER)}
+MISTRAL = Provider("mistral", "https://api.mistral.ai/v1", "MISTRAL_API_KEY")
+PROVIDERS = {p.name: p for p in (FIREWORKS, OPENROUTER, MISTRAL)}
 # Web search, for citations of law that is not loaded.
 TAVILY = Provider("tavily", "https://api.tavily.com", "TAVILY_API_KEY")
 

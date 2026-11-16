@@ -110,6 +110,14 @@ class Completion:
     output_tokens: int
 
 
+def text(content: str | Sequence[Mapping[str, Any]] | None) -> str:
+    """A message's text. Mistral sends a reasoning model's content as a list
+    of chunks, with the reasoning in "thinking" chunks."""
+    if content is None or isinstance(content, str):
+        return content or ""
+    return "".join(c["text"] for c in content if c.get("type") == "text")
+
+
 def complete(
     client: httpx.Client,
     model: ChatModel,
@@ -130,7 +138,7 @@ def complete(
     }
     body = post(client, "/chat/completions", payload, **retry)
     try:
-        content = body["choices"][0]["message"]["content"]
+        content = text(body["choices"][0]["message"]["content"])
     except (KeyError, IndexError, TypeError) as e:
         raise ChatError(f"{model.slug}: no message in the reply") from e
     if not content:
