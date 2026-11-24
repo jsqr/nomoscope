@@ -7,15 +7,13 @@ section is the longest of the code's section numbers that starts the
 citation, so `67-14A(1)` is section 67-14A if the code has one.
 """
 
-import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
 from nomoscope.catalog import build
+from nomoscope.extract import citations
 from nomoscope.settings import Settings
-
-PATH_TOKEN = re.compile(r"[^\s()/]+")
 
 
 def today() -> date:
@@ -25,12 +23,8 @@ def today() -> date:
 
 def parse(ref: str, sections: Iterable[str]) -> tuple[str, str] | None:
     """Split a citation into a section number and a path ("A/1"), or return None."""
-    ref = ref.replace("\xa0", " ").strip().lstrip("§").strip()
-    found = sorted((s for s in sections if ref.startswith(s)), key=len, reverse=True)
-    if not found:
-        return None
-    section = found[0]
-    return section, "/".join(PATH_TOKEN.findall(ref[len(section) :]))
+    found = citations.split_number(ref, set(sections).__contains__)
+    return (found[0], "/".join(found[1])) if found else None
 
 
 @dataclass(frozen=True)

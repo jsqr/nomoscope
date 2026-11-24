@@ -561,11 +561,14 @@ A reference keeps the parts the model read (`kind`, `code`, `section`,
 nomoscope id whether or not the target is loaded, such as
 `us-ny/law/TWN/130` for Town Law section 130. A citation naming no code, or
 a relative one such as "subsection (a)", uses the passage's own code and
-section.
+section. A section number with letters or enumerators run onto it, such as
+"121-20A", is read as the longest section number of the code that starts it,
+then a path.
 
 | `target_status` | |
 | --- | --- |
 | `resolved` | the target is in this jurisdiction's rows |
+| `partial` | the section is in the rows and the cited subdivision is not; the target is the section |
 | `unloaded` | the target's code is not loaded here |
 | `unresolved` | the citation could not be placed |
 

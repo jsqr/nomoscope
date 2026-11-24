@@ -6,14 +6,20 @@ prefixes through the name tables. Enactments get
 `<jurisdiction>/enactment/<kind>/<year>/<number>`, with `-` for a missing
 year.
 
+A section number that is not in the code is read as the longest section
+number that starts it, followed by enumerators: "121-20A" is section 121-20,
+subdivision A, when the code has no section 121-20A.
+
 Statuses:
 - resolved: the target is in this jurisdiction's rows.
+- partial: the section is in the rows and the cited subdivision is not; the
+  target is the section.
 - unloaded: the target's code is not loaded here.
 - unresolved: the citation could not be placed.
 """
 
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from nomoscope.derive import ids
@@ -27,6 +33,7 @@ NODE = "node"
 CODE = "code"
 ENACTMENT = "enactment"
 RESOLVED = "resolved"
+PARTIAL = "partial"
 UNLOADED = "unloaded"
 UNRESOLVED = "unresolved"
 
@@ -59,10 +66,42 @@ class Cited:
 SECTION_WORDS = re.compile(r"(?i)^(?:\u00a7+|sections?|sec\.|ss?\.)\s*")
 ENUMERATOR = re.compile(r"\(([A-Za-z]{1,4}|\d{1,3})\)")
 SLUG = re.compile(r"[^a-z0-9]+")
+PATH_TOKEN = re.compile(r"[^\s()/]+")
 
 
 def section_number(written: str) -> str:
     return SECTION_WORDS.sub("", written.strip()).strip()
+
+
+def split_number(written: str, known: Callable[[str], bool]) -> tuple[str, list[str]] | None:
+    """The longest known section number that starts `written`, and the enumerators after it.
+
+    What follows must not continue the number: "1-13" is not section 1-1 and
+    subdivision 3, nor "9.5-1" section 9.5. A letter may follow a digit, as
+    in "121-20A".
+    """
+    ref = written.replace("\xa0", " ").strip().lstrip("§").strip()
+    for end in range(len(ref), 0, -1):
+        section, rest = ref[:end].rstrip(), ref[end:]
+        if section and known(section) and not _continues(section, rest):
+            return section, PATH_TOKEN.findall(rest)
+    return None
+
+
+def _continues(section: str, rest: str) -> bool:
+    if not rest or rest[0] in "(/" or rest[0].isspace():
+        return False
+    return not (rest[0].isalpha() and section[-1].isdigit())
+
+
+def joined(written: Sequence[str], given: Sequence[str]) -> list[str]:
+    """The enumerators read from a section number, then the path given apart from it.
+
+    A given path that already starts with them is taken as it is.
+    """
+    if list(given[: len(written)]) == list(written):
+        return list(given)
+    return [*written, *given]
 
 
 def code_prefix(idx: Index, names: Names, block_id: str, name: str | None) -> str | None:
@@ -104,15 +143,27 @@ def relative_path(idx: Index, block_id: str, at: int, path: Sequence[str]) -> li
 def section_target(idx: Index, prefix: str, number: str, path: Sequence[str]) -> Target:
     code = own_prefix(idx, prefix)
     num = scopes.unnumbered(section_number(number)) or ""
-    if not num or any(c.isspace() for c in num):
+    if not num:
+        return NONE
+    if code is not None:
+        found = split_number(num, lambda s: (code, scopes.unnumbered(s)) in idx.sections_by_key)
+        if found is not None:
+            written, rest = found
+            section = idx.sections_by_key[code, scopes.unnumbered(written) or ""]
+            return checked(idx, section, joined(rest, path))
+    if any(c.isspace() for c in num):
         # "art. IX, sec. 2" is not a section number an id can carry.
         return NONE
     if code is not None:
-        found = idx.sections_by_key.get((code, num))
-        if found is None:
-            return Target(SECTION, ids.compose(prefix, num), UNRESOLVED)
-        return with_path(found, path, RESOLVED)
+        return Target(SECTION, ids.compose(prefix, num), UNRESOLVED)
     return with_path(ids.compose(prefix, num), path, UNLOADED)
+
+
+def checked(idx: Index, section: str, path: Sequence[str]) -> Target:
+    """The section's subdivision at `path` if the section has it, else the section, partial."""
+    if path and "/".join(path) not in idx.section_paths.get(section, frozenset()):
+        return Target(SECTION, section, PARTIAL)
+    return with_path(section, path, RESOLVED)
 
 
 def with_path(section: str, path: Sequence[str], status: str) -> Target:
@@ -188,8 +239,9 @@ def resolve_one(
                 return NONE
             given = list(path) or written_path(c.text)
             full = relative_path(idx, block_id, at, given) if given else []
-            known = not full or "/".join(full) in idx.paths_of(block_id)
-            return with_path(own_section, full, RESOLVED if known else UNRESOLVED)
+            if full and "/".join(full) not in idx.paths_of(block_id):
+                return Target(SECTION, own_section, PARTIAL)
+            return with_path(own_section, full, RESOLVED)
         prefix = code_prefix(idx, names, block_id, c.code)
         if prefix is None:
             return NONE

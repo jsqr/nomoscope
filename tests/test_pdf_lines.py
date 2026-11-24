@@ -261,6 +261,19 @@ def test_lines_from_blocks_know_their_capitals():
     assert df["caps"].to_list() == [True, False]
 
 
+def test_lines_from_blocks_drop_markdown_list_markers():
+    blocks = pl.DataFrame(
+        [block(0, "list", 72, 90, 540, 120, "- (a) Appoint officers;\n+ (b) Make rules;"),
+         block(1, "text", 72, 130, 540, 140, "-5 degrees and - signs stay.")]
+    )  # fmt: skip
+    df = lines.build(SPANS.clear(), blocks)
+    assert df["text"].to_list() == [
+        "(a) Appoint officers;",
+        "(b) Make rules;",
+        "-5 degrees and - signs stay.",
+    ]
+
+
 def test_a_title_page_whose_few_words_are_all_garbled_reads_from_ocr():
     words = "chapter twenty nine general assistance"
     glyphs = "".join(chr(ord(c) - 28) if c.isalpha() else c for c in words)

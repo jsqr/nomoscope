@@ -277,6 +277,46 @@ def test_citations_resolve_inside_and_outside_the_jurisdiction(windytown, tmp_pa
     assert (first.id, last.id) == (f"{J}/law/municipal/1-1", f"{J}/law/municipal/1-3")
 
 
+def test_a_section_number_with_its_subdivision_attached_resolves(windytown):
+    idx = scopes.index(windytown)
+    [penalty] = windytown.versions.filter(pl.col("section_num") == "1-3")["id"].to_list()
+
+    def resolved(c: Cited):
+        return citations.resolve(idx, names.NONE, penalty, 10, c, None, ())[0]
+
+    glued = resolved(cite("Section 1-3b", "section", section="1-3b"))
+    assert (glued.kind, glued.id, glued.status) == (
+        "subdivision",
+        f"{J}/law/municipal/1-3/b",
+        "resolved",
+    )
+    repeated = resolved(cite("Section 1-3(b)", "section", section="1-3(b)", path=("b",)))
+    assert repeated.id == f"{J}/law/municipal/1-3/b"
+    longer = resolved(cite("Section 1-13", "section", section="1-13"))
+    assert (longer.id, longer.status) == (f"{J}/law/municipal/1-13", "unresolved")
+
+
+def test_a_cited_subdivision_the_section_lacks_is_partial(windytown):
+    idx = scopes.index(windytown)
+    [penalty] = windytown.versions.filter(pl.col("section_num") == "1-3")["id"].to_list()
+
+    def resolved(c: Cited):
+        return citations.resolve(idx, names.NONE, penalty, 10, c, None, ())[0]
+
+    absolute = resolved(cite("Section 1-3(d)", "subdivision", section="1-3", path=("d",)))
+    assert (absolute.kind, absolute.id, absolute.status) == (
+        "section",
+        f"{J}/law/municipal/1-3",
+        "partial",
+    )
+    relative = resolved(cite("subsection (d)", "subdivision", path=("d",), relative=True))
+    assert (relative.kind, relative.id, relative.status) == (
+        "section",
+        f"{J}/law/municipal/1-3",
+        "partial",
+    )
+
+
 def test_scopes_resolve_to_the_rows_and_a_general_penalty_covers_its_code(windytown):
     idx = scopes.index(windytown)
     [penalty] = windytown.versions.filter(pl.col("section_num") == "1-3")["id"].to_list()

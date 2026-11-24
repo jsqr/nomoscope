@@ -76,6 +76,8 @@ SCHEMA = pl.Schema(
     }
 )
 _BOLD = re.compile(r"\*\*(.+?)\*\*")
+# A markdown list item's marker, which the OCR adds and the page does not print.
+_LIST_MARKER = re.compile(r"^[-+]\s+")
 
 
 BLOCK_COLUMNS = ("group", "block_type", "block_ordinal")
@@ -181,7 +183,7 @@ def from_blocks(blocks: pl.DataFrame) -> pl.DataFrame:
         texts = [t for t in b["content"].split("\n") if t.strip()]
         scale = 72 / b["dpi"]
         for i, raw in enumerate(texts):
-            text, spans = unbold(raw.strip().lstrip("#").strip())
+            text, spans = unbold(_LIST_MARKER.sub("", raw.strip().lstrip("#").strip()))
             bold = sum(sp["end"] - sp["start"] for sp in spans) / len(text) if text else 0
             rows.append(
                 {

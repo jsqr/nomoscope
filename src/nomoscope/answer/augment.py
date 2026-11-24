@@ -336,7 +336,7 @@ def reference_notes(
         LEFT JOIN law_at($j, $on) b ON b.id = u.law_version_id
         LEFT JOIN ({HEADINGS}) n ON r.target_kind = 'node' AND n.id = r.target_id
         WHERE r.jurisdiction = $j AND r.block_id = $block AND r.source = 'text'
-          AND r.target_status = 'resolved' AND r.target_end_id IS NULL
+          AND r.target_status IN ('resolved', 'partial') AND r.target_end_id IS NULL
           AND r.start_char >= $start AND r.end_char <= $end
         ORDER BY r.start_char
         """,

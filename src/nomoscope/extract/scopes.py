@@ -73,6 +73,8 @@ class Index:
     block_section: Mapping[str, str]
     subdivisions: Mapping[str, list[Subdivision]]
     subdivision_levels: frozenset[str]
+    # Section id -> the subdivision paths of any of its versions.
+    section_paths: Mapping[str, frozenset[str]]
 
     @property
     def codes(self) -> frozenset[str]:
@@ -125,6 +127,10 @@ def index(rows: Rows) -> Index:
         spans[block_id].append(Subdivision(word, start, end, depth, row_id, path))
         if word:
             levels.add(word)
+    paths: dict[str, set[str]] = defaultdict(set)
+    for block_id, found in spans.items():
+        if block_id in block_section:
+            paths[block_section[block_id]].update(d.path for d in found)
     return Index(
         rows.jurisdiction,
         node_level,
@@ -137,6 +143,7 @@ def index(rows: Rows) -> Index:
         block_section,
         dict(spans),
         frozenset(levels),
+        {k: frozenset(v) for k, v in paths.items()},
     )
 
 

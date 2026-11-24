@@ -188,6 +188,8 @@ def test_cite_parse():
     assert cite.parse("67-3/public-place", sections) == ("67-3", "public-place")
     assert cite.parse("67-14", sections) == ("67-14", "")
     assert cite.parse("99-1", sections) is None
+    assert cite.parse("67-145", sections) is None
+    assert cite.parse("67-14.5", sections) is None
 
 
 def test_cite_gives_the_subdivision_in_force(three, cfg):

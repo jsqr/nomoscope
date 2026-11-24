@@ -202,7 +202,7 @@ TASK = Task(
     build=build,
     schema=SCHEMA,
     place_only=True,
-    version="2",
+    version="3",
     # REFERENCES is reserved in SQL.
     dataset_name="cross_references",
 )
