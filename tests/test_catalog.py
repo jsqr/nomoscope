@@ -204,6 +204,15 @@ def test_cite_gives_the_subdivision_in_force(three, cfg):
     assert whole is not None and whole.text.startswith("(a)") and whole.path == ""
 
 
+def test_cite_names_a_division_by_its_number(three, cfg):
+    found = cite.division(cfg, J, "municipal", "Chapter 1")
+    assert found is not None
+    assert (found.node_id, found.preamble) == (f"{J}/node/municipal/1", None)
+    assert cite.division(cfg, J, "municipal", "Chapter 9") is None
+    out = invoke("cite", J, "municipal", "Chapter 1")
+    assert out.splitlines()[-1] == "no preamble"
+
+
 def test_cite_command(three):
     out = invoke("cite", J, "municipal", "1-2(b)", "--on", "2024-07-01")
     assert out.splitlines()[:2] == [

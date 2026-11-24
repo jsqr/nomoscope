@@ -8,12 +8,14 @@ year.
 
 A section number that is not in the code is read as the longest section
 number that starts it, followed by enumerators: "121-20A" is section 121-20,
-subdivision A, when the code has no section 121-20A.
+subdivision A, when the code has no section 121-20A. A number that is no
+section's but one division's ("Section 5.4" over sections 5.4.1, 5.4.2)
+resolves to that division, which holds any preamble it prints.
 
 Statuses:
 - resolved: the target is in this jurisdiction's rows.
-- partial: the section is in the rows and the cited subdivision is not; the
-  target is the section.
+- partial: the section or division is in the rows and the cited subdivision
+  is not; the target is the section or division.
 - unloaded: the target's code is not loaded here.
 - unresolved: the citation could not be placed.
 """
@@ -151,6 +153,10 @@ def section_target(idx: Index, prefix: str, number: str, path: Sequence[str]) ->
             written, rest = found
             section = idx.sections_by_key[code, scopes.unnumbered(written) or ""]
             return checked(idx, section, joined(rest, path))
+        # "Section 5.4" where 5.4 is a division with sections under it: its preamble.
+        divisions = idx.nodes_by_number.get((code, num), ())
+        if len(divisions) == 1:
+            return Target(NODE, divisions[0], PARTIAL if path else RESOLVED)
     if any(c.isspace() for c in num):
         # "art. IX, sec. 2" is not a section number an id can carry.
         return NONE

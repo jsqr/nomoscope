@@ -241,6 +241,11 @@ otherwise. A replaced `section_num` does not come from the source and is
 shown as assigned. Citations find the section by its `printed_num` where no
 other section has that number.
 
+A division can print law before its first child division, as rules that
+apply to every section under it. A cruncher that marks this text as law puts
+it in the node's `preamble`. It is cited as the division, by the node's id,
+and is never a section.
+
 Section text is normalized before it is hashed into `text_sha256`. Line
 endings, Unicode composition, quote marks, and spacing are made uniform,
 and soft hyphens are removed. Other characters are kept, such as the section
@@ -570,12 +575,14 @@ nomoscope id whether or not the target is loaded, such as
 a relative one such as "subsection (a)", uses the passage's own code and
 section. A section number with letters or enumerators run onto it, such as
 "121-20A", is read as the longest section number of the code that starts it,
-then a path.
+then a path. A number that is no section's but one division's, such as
+"Section 5.4" over sections 5.4.1 and 5.4.2, resolves to that division's
+node, which holds its preamble.
 
 | `target_status` | |
 | --- | --- |
 | `resolved` | the target is in this jurisdiction's rows |
-| `partial` | the section is in the rows and the cited subdivision is not; the target is the section |
+| `partial` | the section or division is in the rows and the cited subdivision is not; the target is the section or division |
 | `unloaded` | the target's code is not loaded here |
 | `unresolved` | the citation could not be placed |
 

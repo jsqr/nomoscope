@@ -116,6 +116,10 @@ def tabulated(zone: str) -> dict[str, pl.Schema]:
                 "sequence": pl.Int64,
                 "contains_sections": pl.Boolean,
                 "part_code": pl.String,
+                # Law a division prints before its first child division: its
+                # preamble, cited as the division. Null unless the cruncher
+                # marks it as law.
+                "preamble": pl.String,
             }
         ),
         LAW_PUBLICATIONS: pl.Schema(

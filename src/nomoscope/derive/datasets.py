@@ -57,6 +57,7 @@ NODE_PAYLOAD = (
     "sequence",
     "contains_sections",
     "part_code",
+    "preamble",
 )
 ANCESTOR_KEY = ("law_code", "descendant_id", "ancestor_id", "depth")
 NOTE_KEY = ("law_code", "section_num", "node_treepath", "kind", "text")
@@ -182,6 +183,7 @@ NODE_SCHEMA = pl.Schema(
         "sequence": pl.Int64,
         "contains_sections": pl.Boolean,
         "part_code": pl.String,
+        "preamble": pl.String,
         **SEEN,
         **ABSENT,
     }

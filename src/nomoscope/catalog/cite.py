@@ -5,6 +5,10 @@ them: `67-14(A)(1)`, `67-14A(1)`, `67-14 A(1)`, with or without a leading
 section sign. A run-in term is named by its slug: `67-3/building`. The
 section is the longest of the code's section numbers that starts the
 citation, so `67-14A(1)` is section 67-14A if the code has one.
+
+A number that is no section's but one current division's, as `5.4` over
+sections 5.4.1 and 5.4.2, names that division (`division`): its heading,
+and its preamble, the law it prints before its first child division.
 """
 
 from collections.abc import Iterable
@@ -12,7 +16,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
 from nomoscope.catalog import build
-from nomoscope.extract import citations
+from nomoscope.extract import citations, scopes
 from nomoscope.settings import Settings
 
 
@@ -65,3 +69,34 @@ def lookup(
     finally:
         conn.close()
     return Cited(**dict(zip(names, row, strict=True))) if row else None
+
+
+@dataclass(frozen=True)
+class Division:
+    jurisdiction: str
+    law_code: str
+    node_id: str
+    number: str
+    level: str | None
+    heading: str | None
+    preamble: str | None
+
+
+def division(cfg: Settings, jurisdiction: str, code: str, ref: str) -> Division | None:
+    """The one current division numbered `ref` in the code, or None."""
+    number = scopes.unnumbered(citations.section_number(ref)) or ""
+    conn = build.connect(cfg)
+    try:
+        rows = conn.execute(
+            "SELECT id, number, level, heading, preamble FROM law_nodes"
+            " WHERE jurisdiction = ? AND law_code = ? AND absent_from IS NULL"
+            " AND rtrim(trim(number), '.') = ?"
+            " QUALIFY row_number() OVER (PARTITION BY id ORDER BY last_seen DESC) = 1",
+            [jurisdiction, code, number],
+        ).fetchall()
+    finally:
+        conn.close()
+    if len(rows) != 1:
+        return None
+    [(node_id, num, level, heading, preamble)] = rows
+    return Division(jurisdiction, code, node_id, num, level, heading, preamble)

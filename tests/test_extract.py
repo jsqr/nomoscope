@@ -317,6 +317,25 @@ def test_a_renumbered_section_is_found_by_its_printed_number_where_free(windytow
     assert own.id == f"{J}/law/municipal/1-3"
 
 
+def test_a_division_number_cited_as_a_section_resolves_to_the_division(windytown):
+    bare = pl.col("number").str.strip_prefix("Chapter ")
+    nodes = windytown.nodes.with_columns(bare.alias("number"))
+    idx = scopes.index(dataclasses.replace(windytown, nodes=nodes))
+    [penalty] = windytown.versions.filter(pl.col("section_num") == "1-3")["id"].to_list()
+
+    def resolved(c: Cited):
+        return citations.resolve(idx, names.NONE, penalty, 10, c, None, ())[0]
+
+    chapter = resolved(cite("Section 1", "section", section="1"))
+    assert (chapter.kind, chapter.id, chapter.status) == (
+        "node",
+        f"{J}/node/municipal/1",
+        "resolved",
+    )
+    sub = resolved(cite("Section 1(a)", "subdivision", section="1", path=("a",)))
+    assert (sub.id, sub.status) == (f"{J}/node/municipal/1", "partial")
+
+
 def test_a_cited_subdivision_the_section_lacks_is_partial(windytown):
     idx = scopes.index(windytown)
     [penalty] = windytown.versions.filter(pl.col("section_num") == "1-3")["id"].to_list()

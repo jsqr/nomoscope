@@ -16,7 +16,7 @@ Bases:
 import re
 from collections import defaultdict
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from nomoscope.derive import ids
 from nomoscope.extract.rows import Rows
@@ -75,6 +75,8 @@ class Index:
     subdivision_levels: frozenset[str]
     # Section id -> the subdivision paths of any of its versions.
     section_paths: Mapping[str, frozenset[str]]
+    # (code, number) -> the divisions of any level with that number.
+    nodes_by_number: Mapping[tuple[str, str], tuple[str, ...]] = field(default_factory=dict)
 
     @property
     def codes(self) -> frozenset[str]:
@@ -101,12 +103,15 @@ def index(rows: Rows) -> Index:
     node_parent: dict[str, str | None] = {}
     node_number: dict[str, str | None] = {}
     by_key: dict[tuple[str, str | None, str | None], list[str]] = defaultdict(list)
+    by_number: dict[tuple[str, str], list[str]] = defaultdict(list)
     columns = ["id", "parent_id", "level", "number", "law_code"]
     for node_id, parent_id, level, number, code in rows.nodes.select(columns).iter_rows():
         node_level[node_id] = level.lower() if level else None
         node_parent[node_id] = parent_id
         node_number[node_id] = unnumbered(number)
         by_key[code, node_level[node_id], unnumbered(number)].append(node_id)
+        if number:
+            by_number[code, unnumbered(number) or ""].append(node_id)
     section_node: dict[str, str | None] = {}
     section_code: dict[str, str] = {}
     sections_by_key: dict[tuple[str, str], str] = {}
@@ -151,6 +156,7 @@ def index(rows: Rows) -> Index:
         dict(spans),
         frozenset(levels),
         {k: frozenset(v) for k, v in paths.items()},
+        {k: tuple(v) for k, v in by_number.items()},
     )
 
 

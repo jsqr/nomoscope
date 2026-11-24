@@ -70,8 +70,14 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
             raise fail(f"--on: {e}") from e
         try:
             found = citing.lookup(cfg, jurisdiction, code, ref, when)
+            division = None if found else citing.division(cfg, jurisdiction, code, ref)
         except duckdb.Error as e:
             raise fail(str(e)) from e
+        if division is not None:
+            level = f"  [{division.level}]" if division.level else ""
+            typer.echo(f"{division.number}  {division.heading or ''}{level}")
+            typer.echo(f"preamble:\n{division.preamble}" if division.preamble else "no preamble")
+            return
         if found is None:
             raise fail(f"{ref}: not in force in {jurisdiction} {code} on {when or citing.today()}")
         where = f"({found.path.replace('/', ')(')})" if found.path else ""
