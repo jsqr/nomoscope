@@ -1,3 +1,5 @@
+import dataclasses
+
 import polars as pl
 import pytest
 
@@ -294,6 +296,25 @@ def test_a_section_number_with_its_subdivision_attached_resolves(windytown):
     assert repeated.id == f"{J}/law/municipal/1-3/b"
     longer = resolved(cite("Section 1-13", "section", section="1-13"))
     assert (longer.id, longer.status) == (f"{J}/law/municipal/1-13", "unresolved")
+
+
+def test_a_renumbered_section_is_found_by_its_printed_number_where_free(windytown):
+    assert "printed_num" in windytown.versions.columns
+    other = next(n for n in windytown.versions["section_num"].unique() if n != "1-3")
+    printed = {"1-3": "9-9", other: "1-3"}
+    versions = windytown.versions.with_columns(
+        pl.col("section_num").replace_strict(printed, default=None).alias("printed_num")
+    )
+    idx = scopes.index(dataclasses.replace(windytown, versions=versions))
+    [penalty] = versions.filter(pl.col("section_num") == "1-3")["id"].to_list()
+
+    def resolved(c: Cited):
+        return citations.resolve(idx, names.NONE, penalty, 10, c, None, ())[0]
+
+    by_print = resolved(cite("Section 9-9", "section", section="9-9"))
+    assert (by_print.id, by_print.status) == (f"{J}/law/municipal/1-3", "resolved")
+    own = resolved(cite("Section 1-3", "section", section="1-3"))
+    assert own.id == f"{J}/law/municipal/1-3"
 
 
 def test_a_cited_subdivision_the_section_lacks_is_partial(windytown):

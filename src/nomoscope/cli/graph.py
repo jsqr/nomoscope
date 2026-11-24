@@ -44,6 +44,11 @@ def add(app: typer.Typer, registry: Registry, name: str) -> None:
         for c in report.crunchers:
             states = ", ".join(f"{k} {n}" for k, n in sorted(c.states.items()))
             typer.echo(f"{c.cruncher:24} {states}")
+        if report.held:
+            typer.echo("")
+            typer.echo("held tabulations, which derive does not read:")
+        for h in report.held:
+            typer.echo(f"  {h.cruncher} {h.unit}: {h.reason or 'no reason recorded'}")
         if report.jurisdictions:
             typer.echo("")
             typer.echo(f"{'jurisdiction':24} {'derive':8} {'pubs':>5} {'versions':>9}  crunchers")

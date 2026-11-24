@@ -117,6 +117,13 @@ def index(rows: Rows) -> Index:
         section_node.setdefault(section_id, node_id)
         section_code.setdefault(section_id, code)
         sections_by_key.setdefault((code, unnumbered(num) or ""), section_id)
+    # A section renumbered in review is also found by its printed number, where
+    # no section has that number of its own.
+    if "printed_num" in rows.versions.columns:
+        columns = ["section_id", "law_code", "printed_num"]
+        for section_id, code, printed in rows.versions.select(columns).iter_rows():
+            if printed is not None:
+                sections_by_key.setdefault((code, unnumbered(printed) or ""), section_id)
     spans: dict[str, list[Subdivision]] = defaultdict(list)
     levels: set[str] = set()
     columns = ["law_version_id", "level", "start_char", "end_char", "depth", "subdivision_id"]

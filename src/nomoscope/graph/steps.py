@@ -113,6 +113,12 @@ def admitted(step: Stored) -> bool:
     return not step.details or step.details.get("admitted") is not False
 
 
+def held_reason(step: Stored) -> str | None:
+    """Why a held tabulation is held, where its cruncher records `reason`."""
+    reason = step.details.get("reason") if step.details else None
+    return str(reason) if reason is not None else None
+
+
 def table_row(
     cfg: Settings,
     name: str,

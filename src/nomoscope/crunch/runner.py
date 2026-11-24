@@ -179,6 +179,16 @@ def pending(
     return counts
 
 
+def held(conn: duckdb.DuckDBPyConnection, registry: Registry) -> list[tuple[str, str, str | None]]:
+    """Each held tabulation: its cruncher, its unit, and the reason it records."""
+    return [
+        (name, unit, steps.held_reason(s))
+        for name in sorted(registry.crunchers)
+        for unit, s in sorted(steps.stored(conn, TABULATE, name).items())
+        if not steps.admitted(s)
+    ]
+
+
 def record_step(
     store: Store,
     planned: Planned,

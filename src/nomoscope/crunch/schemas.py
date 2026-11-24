@@ -96,6 +96,10 @@ def tabulated(zone: str) -> dict[str, pl.Schema]:
                 # The law_code of the part this section holds, as a water supply
                 # code incorporated in a section.
                 "part_code": pl.String,
+                # Set only when review assigned section_num: the number the
+                # source prints, and why it was replaced.
+                "printed_num": pl.String,
+                "number_note": pl.String,
             }
         ),
         LAW_NODES: pl.Schema(
@@ -139,8 +143,9 @@ def tabulated(zone: str) -> dict[str, pl.Schema]:
         ),
         # One row per code in a publication: the main code, then its parts.
         # kind is law or rules (in the law tables), or reference, exhibit,
-        # apparatus, or superseded (in law_attachments). A part within a division names
-        # the host code and the division's treepath.
+        # apparatus, superseded, or misprint (lines the print or its OCR
+        # repeats or garbles; in law_attachments). A part within a division
+        # names the host code and the division's treepath.
         LAW_CODES: pl.Schema(
             {
                 "jurisdiction": pl.String,

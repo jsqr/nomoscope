@@ -43,12 +43,20 @@ class JurisdictionStatus:
 
 
 @dataclass(frozen=True)
+class Held:
+    cruncher: str
+    unit: str
+    reason: str | None
+
+
+@dataclass(frozen=True)
 class Status:
     data_root: Path
     sources: tuple[SourceStatus, ...]
     crunchers: tuple[CruncherStatus, ...]
     jurisdictions: tuple[JurisdictionStatus, ...]
     catalog: bool
+    held: tuple[Held, ...] = ()
 
 
 def status(cfg: Settings, known: Registry) -> Status:
@@ -76,6 +84,7 @@ def status(cfg: Settings, known: Registry) -> Status:
             CruncherStatus(name, states)
             for name, states in sorted(runner.pending(cfg, conn, known, routes).items())
         )
+        held = tuple(Held(*h) for h in runner.held(conn, known))
         plans = build.plan(conn, routes, drafting.load(known.conventions), known.segments)
         state = steps.classify(cfg, conn, [p.planned for p in plans], check_outputs=False)
         jurisdictions = []
@@ -98,4 +107,5 @@ def status(cfg: Settings, known: Registry) -> Status:
         crunchers,
         tuple(jurisdictions),
         cfg.catalog.is_file(),
+        held,
     )

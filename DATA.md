@@ -215,9 +215,9 @@ tables are already present, it records the step from the manifest and
 does not run it; the crunch output marks it "adopted". `--force` and
 `--record` always run.
 
-A tabulation can be held pending operator verification: when a cruncher
-records `admitted: false` for the tabulate step, that blocks derive from
-reading it. `status` counts the held-up tabulations.
+A tabulation can be held: when a cruncher records `admitted: false` for
+the tabulate step, derive does not read it. `status` counts the held
+tabulations and lists each with the `reason` its cruncher records.
 
 ### The tabulated tables
 
@@ -233,6 +233,13 @@ Every row has a `jurisdiction`. `law_code` is the code's short name in
 the jurisdiction, such as `municipal` or `GOV`. `drafting` names the
 section's drafting conventions. `statutory_default_date` is set where the
 source has a default effective-date rule.
+
+`section_num` is the number the source prints, unless review replaced it,
+as for a number printed twice in one code. Then `printed_num` is the number
+the source prints and `number_note` says why it was replaced; both are null
+otherwise. A replaced `section_num` does not come from the source and is
+shown as assigned. Citations find the section by its `printed_num` where no
+other section has that number.
 
 Section text is normalized before it is hashed into `text_sha256`. Line
 endings, Unicode composition, quote marks, and spacing are made uniform,
