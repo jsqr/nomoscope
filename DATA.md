@@ -228,6 +228,8 @@ tabulations and lists each with the `reason` its cruncher records.
 | `law_publications` | publication (one row) |
 | `sessions` | legislative session (optional) |
 | `law_notes` | note printed with a section or a heading (optional) |
+| `law_codes` | code in the publication: the main code, then its parts (optional) |
+| `law_attachments` | part that is not law, such as an index, kept as text (optional) |
 
 Every row has a `jurisdiction`. `law_code` is the code's short name in
 the jurisdiction, such as `municipal` or `GOV`. `drafting` names the
@@ -339,10 +341,12 @@ Other ids join the jurisdiction, a kind, and the source's keys with `/`:
 | `law_subdivisions` | subdivision of a version |
 | `segments` | segment of a version |
 | `law_notes` | note printed with a section or a heading |
+| `law_codes` | code in a publication, with its kind |
+| `law_attachments` | part of a publication that is not law, with its text |
 
-`publications` and `sessions` are built for every jurisdiction. The law
-datasets are built only if the jurisdiction's publications carry law
-tables.
+`publications`, `sessions`, `law_codes`, and `law_attachments` are built
+for every jurisdiction. The law datasets are built only if the
+jurisdiction's publications carry law tables.
 
 ### Observation columns
 
